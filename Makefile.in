@@ -1,0 +1,18 @@
+CC = @CC@
+VERSION = @VERSION@
+CFLAGS = @CFLAGS@
+LIBS = @LIBS@
+FLAGS=$(CFLAGS) @DEFS@
+INSTALL=@INSTALL@
+prefix=@prefix@
+bindir=$(prefix)@bindir@
+
+all: 
+	@cd libUseful-2.0; $(MAKE)
+	$(CC) $(FLAGS) $(LIBS) -g -ogetlock main.c libUseful-2.0/libUseful-2.0.a
+
+clean:
+	@rm -f getlock libUseful-2.0/*.o libUseful-2.0/*.a libUseful-2.0/*.so
+
+install:
+	$(INSTALL) getlock $(bindir)
