@@ -361,7 +361,7 @@ int pfds[2];
 ParseArgs(argc,argv);
 
 if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
-if (StrLen(Settings.User)) SwitchGroup(Settings.User);
+if (StrLen(Settings.User)) SwitchUser(Settings.User);
 
 
 if (! ListSize(Settings.LockFiles)) 
