@@ -41,7 +41,7 @@ char *Group;
 
 TSettings Settings;
 
-char *Version="0.3";
+char *Version="0.5";
 
 void SigHandler(int sig)
 {

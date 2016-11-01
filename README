@@ -31,21 +31,31 @@ USAGE:
 COMMAND:
 	getlock [options] LockFilePath [LockFilePath] ... Program
 
+
 -a <n>	 Abandon running program/script after 'n' seconds, kill all subprocesses and exit, useful if script 'hangs'
 -b       Fork into background when got lock
 -d       delete lockfile when done
+-n       'nohup', ignore SIGHUP
+-nohup   ignore SIGHUP
 -w       wait for lock (default is do not wait)
 -t <n>   timeout <n> secs on wait (default is wait forever if -w used)
 -s       SAFE MODE, do not write pid into file
 -D       Debug. Print what you're doing.
--S	 Silent. Don't print error messages.
+-S       Silent. No error messages.
 -F       Run specified program if can't get lock
 -N       NO PROGRAM, just lock files, use with -w
 -X       execute program even if lock fails!
 -g <n>   Gracetime, wait <n> secs before doing kills
 -k       Send SIGTERM to lockfile owner
 -K       Send SIGKILL (kill -9) to lockfile owner
+-U <user> Run as user
+-user <user> Run as user
+-G <group> Run as group
+-group <group> Run as group
+-v       print version
+-version print version
 -?       this help
+
 
 	The flags -d -s -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.
 	-k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than 20 bytes, as they are too big to only contain a Process ID
