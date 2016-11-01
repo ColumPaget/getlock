@@ -35,6 +35,8 @@ int AbandonTime;
 ListNode *LockFiles;
 char *Program;
 char *OnFail;
+char *User;
+char *Group;
 } TSettings;
 
 TSettings Settings;
@@ -58,8 +60,6 @@ void PrintUsage()
 	printf("getlock %s:\n",Version);
 	printf("Author: Colum Paget\n");
 	printf("Email: colums.projects@gmail.com\n");
-	printf("Blog: \n");
-	printf("  tech: http://idratherhack.blogspot.com \n");
 	printf("\n");
 	printf("getlock tries to lock 1 or more lockfiles, and then runs a program if it can (or doesn't, if -N used).\n");
 	printf("USAGE:\n	getlock [options] LockFilePath [LockFilePath] ... Program\n\n");
@@ -80,6 +80,10 @@ void PrintUsage()
 	printf("%-8s %s\n","-g <n>","Gracetime, wait <n> secs before doing kills");
 	printf("%-8s %s\n","-k","Send SIGTERM to lockfile owner");
 	printf("%-8s %s\n","-K","Send SIGKILL (kill -9) to lockfile owner");
+	printf("%-8s %s\n","-U <user>","Run as user");
+	printf("%-8s %s\n","-user <user>","Run as user");
+	printf("%-8s %s\n","-G <group>","Run as group");
+	printf("%-8s %s\n","-group <group>","Run as group");
 	printf("%-8s %s\n","-v","print version");
 	printf("%-8s %s\n","-version","print version");
 	printf("%-8s %s\n","-?","this help");
@@ -119,9 +123,8 @@ ListNode *Curr;
 TLockFile *LF;
 int i;
 
-Settings.Flags=0;
-Settings.Timeout=0;
-Settings.GraceTime=0;
+memset(&Settings, 0, sizeof(Settings));
+Settings.LockFiles=ListCreate();
 
 for (i=1; i < argc; i++)
 {
@@ -141,6 +144,10 @@ for (i=1; i < argc; i++)
 	else if (strcmp(argv[i],"-k")==0) Settings.Flags |= FLAG_TERM_OWNER;
 	else if (strcmp(argv[i],"-K")==0) Settings.Flags |= FLAG_KILL_OWNER;
 	else if (strcmp(argv[i],"-F")==0) Settings.OnFail=CopyStr(Settings.OnFail,argv[++i]);
+	else if (strcmp(argv[i],"-U")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
+	else if (strcmp(argv[i],"-user")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
+	else if (strcmp(argv[i],"-G")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
+	else if (strcmp(argv[i],"-group")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
 	else if (strcmp(argv[i],"-t")==0) Settings.Timeout=atoi(argv[++i]);
 	else if (strcmp(argv[i],"-v")==0) 
 	{
@@ -152,7 +159,11 @@ for (i=1; i < argc; i++)
 		 printf("version: %s\n",Version);
 		exit(0);
 	}
-	else if (strcmp(argv[i],"-?")==0)
+	else if (
+		(strcmp(argv[i],"-?")==0) ||
+		(strcmp(argv[i],"-help")==0) ||
+		(strcmp(argv[i],"--help")==0)
+		)
 	{
 		PrintUsage();
 		exit(0);
@@ -347,9 +358,10 @@ int result, GotLock=FALSE;
 char *Tempstr=NULL;
 int pfds[2];
 
-memset(&Settings,0,sizeof(TSettings));
-Settings.LockFiles=ListCreate();
 ParseArgs(argc,argv);
+
+if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
+if (StrLen(Settings.User)) SwitchGroup(Settings.User);
 
 
 if (! ListSize(Settings.LockFiles)) 

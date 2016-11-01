@@ -3,8 +3,8 @@ VERSION = 0.1
 CFLAGS = -g -O2
 LIBS = 
 FLAGS=$(CFLAGS) -DPACKAGE_NAME=\"\" -DPACKAGE_TARNAME=\"\" -DPACKAGE_VERSION=\"\" -DPACKAGE_STRING=\"\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DSTDC_HEADERS=1
-INSTALL=/bin/install -c
-prefix=/usr/local
+INSTALL=/usr/bin/install -c
+prefix=/usr
 bindir=$(prefix)${exec_prefix}/bin
 
 all: 
