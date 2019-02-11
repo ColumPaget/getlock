@@ -9,6 +9,7 @@
 #define FLAG_NO_WRITE 32
 #define FLAG_GOT_LOCK 64
 #define FLAG_NO_PROGRAM 128
+#define FLAG_CLOEXEC    256
 #define FLAG_BACKGROUND 512
 #define FLAG_SILENT 1024
 #define FLAG_DEBUG 2048
@@ -64,6 +65,7 @@ void PrintUsage()
 	printf("getlock tries to lock 1 or more lockfiles, and then runs a program if it can (or doesn't, if -N used).\n");
 	printf("USAGE:\n	getlock [options] LockFilePath [LockFilePath] ... Program\n\n");
 	printf("Note that if you wish to pass arguments to the program, then you must quote it like this: getlock /var/lock/lockfile.lck \"/usr/bin/md5sum /tmp/*\"\n\n");
+
 	printf("%-8s %s\n","-a <seconds>","Abandon running task, killall subprocesses and exit after <seconds>");
 	printf("%-8s %s\n","-b","Fork into background when got lock");
 	printf("%-8s %s\n","-d","delete lockfile when done");
@@ -72,6 +74,7 @@ void PrintUsage()
 	printf("%-8s %s\n","-w","wait for lock (default is do not wait)");
 	printf("%-8s %s\n","-t <n>","timeout <n> secs on wait (default is wait forever if -w used)");
 	printf("%-8s %s\n","-s","SAFE MODE, do not write pid into file");
+	printf("%-8s %s\n","-C","Close on exec, this prevents lockfiles being inherited by the child process.");
 	printf("%-8s %s\n","-D","Debug. Print what you're doing.");
 	printf("%-8s %s\n","-S","Silent. No error messages.");
 	printf("%-8s %s\n","-F","Run specified program if can't get lock");
@@ -89,6 +92,7 @@ void PrintUsage()
 	printf("%-8s %s\n","-?","this help");
 	printf("\n	The flags -d -s -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.\n");
 	printf("	-k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than 20 bytes, as they are too big to only contain a Process ID\n\n");
+	printf("   -C is used in situations where you want to allow child processes to be launched without holding a lock. Normally, when running a program or script, one wants to hold a lock file until not only the program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running in the background.\n");
 	printf("RETURN VALUE: 0 on lock, 1 if bad args on the command line, 3 if failed to get lock. Works with bash-style 'if'\n\n");
 	printf("EXAMPLES:\n");
 	printf("getlock /tmp/file1.lck /var/lock/file2.lck \"echo Got locks!\"\n");
@@ -136,6 +140,7 @@ for (i=1; i < argc; i++)
 	else if (strcmp(argv[i],"-n")==0) Settings.Flags |= FLAG_NOHUP;
 	else if (strcmp(argv[i],"-nohup")==0) Settings.Flags |= FLAG_NOHUP;
 	else if (strcmp(argv[i],"-s")==0) Settings.Flags |= FLAG_NO_WRITE;
+	else if (strcmp(argv[i],"-C")==0) Settings.Flags |= FLAG_CLOEXEC;
 	else if (strcmp(argv[i],"-X")==0) Settings.Flags |= FLAG_RUN_ANYWAY;
 	else if (strcmp(argv[i],"-N")==0) Settings.Flags |= FLAG_NO_PROGRAM;
 	else if (strcmp(argv[i],"-D")==0) Settings.Flags |= FLAG_DEBUG;
@@ -191,10 +196,13 @@ int DoLock(TLockFile *LF, int *OwnerPid)
 int result=FALSE;
 char *Tempstr=NULL;
 struct stat FStat;
+int oflags=O_RDWR | O_CREAT;
 
 if (LF->Flags & FLAG_GOT_LOCK) return(TRUE);
 
-if (LF->fd==-1) LF->fd=open(LF->Path,O_RDWR | O_CREAT,0666);
+if (Settings.Flags & FLAG_CLOEXEC) oflags |= O_CLOEXEC;
+
+if (LF->fd==-1) LF->fd=open(LF->Path, oflags, 0666);
 if (LF->fd==-1)
 {
   if (! (Settings.Flags & FLAG_SILENT)) printf("Couldn't open lock file\n");
@@ -302,7 +310,7 @@ while (1)
 {
 	time(&Now);
 	if	((Now-Start) > Settings.GraceTime) Flags=FLAG_TERM_OWNER | FLAG_KILL_OWNER;
-	GotLock=LockAll(Settings.LockFiles,Flags);
+	GotLock=LockAll(Settings.LockFiles, Flags);
 	if (GotLock) break;
 	if (! (Settings.Flags & FLAG_WAIT)) break;
 

@@ -40,6 +40,7 @@ COMMAND:
 -w       wait for lock (default is do not wait)
 -t <n>   timeout <n> secs on wait (default is wait forever if -w used)
 -s       SAFE MODE, do not write pid into file
+-C       Close on exec, this prevents lockfiles being inherited by the child process.
 -D       Debug. Print what you're doing.
 -S       Silent. No error messages.
 -F       Run specified program if can't get lock
