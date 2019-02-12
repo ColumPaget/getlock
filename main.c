@@ -42,7 +42,7 @@ char *Group;
 
 TSettings Settings;
 
-char *Version="0.5";
+char *Version="1.0";
 
 void SigHandler(int sig)
 {
@@ -89,7 +89,11 @@ void PrintUsage()
 	printf("%-8s %s\n","-group <group>","Run as group");
 	printf("%-8s %s\n","-v","print version");
 	printf("%-8s %s\n","-version","print version");
+	printf("%-8s %s\n","--version","print version");
 	printf("%-8s %s\n","-?","this help");
+	printf("%-8s %s\n","-h","this help");
+	printf("%-8s %s\n","-help","this help");
+	printf("%-8s %s\n","--help","this help");
 	printf("\n	The flags -d -s -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.\n");
 	printf("	-k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than 20 bytes, as they are too big to only contain a Process ID\n\n");
 	printf("   -C is used in situations where you want to allow child processes to be launched without holding a lock. Normally, when running a program or script, one wants to hold a lock file until not only the program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running in the background.\n");
@@ -154,20 +158,21 @@ for (i=1; i < argc; i++)
 	else if (strcmp(argv[i],"-G")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
 	else if (strcmp(argv[i],"-group")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
 	else if (strcmp(argv[i],"-t")==0) Settings.Timeout=atoi(argv[++i]);
-	else if (strcmp(argv[i],"-v")==0) 
+	else if (
+					(strcmp(argv[i],"-v")==0) ||
+					(strcmp(argv[i],"-version")==0) ||
+					(strcmp(argv[i],"--version")==0)
+				)
 	{
 		printf("version: %s\n",Version);
 		exit(0);
 	}
-	else if (strcmp(argv[i],"-version")==0)
-	{
-		 printf("version: %s\n",Version);
-		exit(0);
-	}
-	else if (
-		(strcmp(argv[i],"-?")==0) ||
-		(strcmp(argv[i],"-help")==0) ||
-		(strcmp(argv[i],"--help")==0)
+	else if
+		(
+			(strcmp(argv[i],"-?")==0) ||
+			(strcmp(argv[i],"-h")==0) ||
+			(strcmp(argv[i],"-help")==0) ||
+			(strcmp(argv[i],"--help")==0)
 		)
 	{
 		PrintUsage();
