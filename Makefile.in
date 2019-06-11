@@ -16,3 +16,6 @@ clean:
 
 install:
 	$(INSTALL) getlock $(bindir)
+
+test:
+	-echo "no tests"
