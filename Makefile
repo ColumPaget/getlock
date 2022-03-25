@@ -1,5 +1,5 @@
 CC = gcc
-VERSION = 0.1
+VERSION = @VERSION@
 CFLAGS = -g -O2
 LIBS = 
 FLAGS=$(CFLAGS) -DPACKAGE_NAME=\"\" -DPACKAGE_TARNAME=\"\" -DPACKAGE_VERSION=\"\" -DPACKAGE_STRING=\"\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DSTDC_HEADERS=1
@@ -8,11 +8,14 @@ prefix=/usr/local
 bindir=$(prefix)${exec_prefix}/bin
 
 all: 
-	@cd libUseful-2.0; $(MAKE)
-	$(CC) $(FLAGS) $(LIBS) -g -ogetlock main.c libUseful-2.0/libUseful-2.0.a
+	@cd libUseful-4; $(MAKE)
+	$(CC) $(FLAGS) $(LIBS) -g -ogetlock main.c libUseful-4/libUseful-4.a
 
 clean:
-	@rm -f getlock libUseful-2.0/*.o libUseful-2.0/*.a libUseful-2.0/*.so
+	@rm -f getlock libUseful-4/*.o libUseful-4/*.a libUseful-4/*.so
 
 install:
 	$(INSTALL) getlock $(bindir)
+
+test:
+	-echo "no tests"

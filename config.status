@@ -427,7 +427,7 @@ Copyright (C) 2012 Free Software Foundation, Inc.
 This config.status script is free software; the Free Software Foundation
 gives unlimited permission to copy, distribute and modify it."
 
-ac_pwd='/home/colum/getlock'
+ac_pwd='/home/colum/work/getlock'
 srcdir='.'
 INSTALL='/bin/install -c'
 test -n "$AWK" || AWK=awk
@@ -598,8 +598,7 @@ S["CPPFLAGS"]=""
 S["LDFLAGS"]=""
 S["CFLAGS"]="-g -O2"
 S["CC"]="gcc"
-S["subdirs"]=" libUseful-2.0"
-S["VERSION"]="0.1"
+S["subdirs"]=" libUseful-4"
 S["target_alias"]=""
 S["host_alias"]=""
 S["build_alias"]=""
