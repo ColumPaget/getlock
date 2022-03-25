@@ -1,7 +1,7 @@
 WHAT IS IT
 ==========
 
-	It's a program that locks files using kernel-locks, and then optionally runs a program. It can fork itself into the background while holding a lock, so that it can be used in shell scripts.
+It's a program that locks files using kernel-locks, and then optionally runs a program. It can fork itself into the background while holding a lock, so that it can be used in shell scripts.
 
 
 AUTHOR
@@ -15,7 +15,7 @@ Email: colums.projects@gmail.com
 DISCLAIMER
 ==========
 
-  This is free software. It comes with no guarentees and I take no responsiblity if it makes your computer explode or opens a portal to the demon dimensions, or does anything.
+This is free software. It comes with no guarentees and I take no responsiblity if it makes your computer explode or opens a portal to the demon dimensions, or does anything.
 
 
 INSTALL
@@ -40,9 +40,11 @@ Do the usual './configure; make; make install'
 USAGE
 =====
 
-	In it's simplest form, getlock takes a list of one or more lockfiles, followed by a program to run (the last argument). It tries to lock the files using kernel 'lockf' locking. If it can lock them all, then it runs the program. It's default behavior is to exit if it can't get all the locks on the first try, using the -w flag (optionally with the -t flag) can pursuade it to try repeatedly to get the locks, either forever or until some timeout. 
-	By default getlock writes its Process ID into the lockfiles, though this can be suppressed with the -s option. It will not do this for files larger than 20 bytes though, as files that big are probably not lockfiles, but data files that it shouldn't overwrite!
-	getlock can be used within shell scripts by using the -b argument to make it fork into the background once it has the lock, the -w argument to make it hold the lock once it's got it, and the -N argument to tell it not to run a program, just to lock the files and hold the lock. When the shell script exits, it should get the pid of the getlock process from one of the lockfiles, and then kill the getlock to release the lock.
+In it's simplest form, getlock takes a list of one or more lockfiles, followed by a program to run (the last argument). It tries to lock the files using kernel 'lockf' locking. If it can lock them all, then it runs the program. It's default behavior is to exit if it can't get all the locks on the first try, using the -w flag (optionally with the -t flag) can pursuade it to try repeatedly to get the locks, either forever or until some timeout. 
+
+By default getlock writes its Process ID into the lockfiles, though this can be suppressed with the -s option. It will not do this for files larger than 20 bytes though, as files that big are probably not lockfiles, but data files that it shouldn't overwrite!
+
+getlock can be used within shell scripts by using the -b argument to make it fork into the background once it has the lock, the -w argument to make it hold the lock once it's got it, and the -N argument to tell it not to run a program, just to lock the files and hold the lock. When the shell script exits, it should get the pid of the getlock process from one of the lockfiles, and then kill the getlock to release the lock.
 
 
 COMMAND
