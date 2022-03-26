@@ -81,15 +81,15 @@ getlock [options] LockFilePath [LockFilePath] ... Program
 -?       this help
 ```
 
-The flags -d -s -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.
+The flags -d -s -i -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.
 
--k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than 20 bytes, as they are too big to only contain a Process ID
+-k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it. Similarly -i uses a date written to the lock file, and so will also not work with -s. getlock will also refuse to write into files bigger than 25 bytes, as they are too big to only contain a Process ID and timestamp.
 
 
 RUN INTERVAL
 ============
 
-The `-i` option prevents a command from running until a timeout has expired. It uses the date stored in the lock file, along with the interval specified on the command-line. The command will only run when the time goes past this combined value. However, the run command MUST RETURN AN EXIT STATUS OF 0. For any other exit status it is assumed the command failed, and the wait interval is cancelled by deleting any lockfiles that the -d option was specified for.
+The `-i` option prevents a command from running until a timeout has expired. It uses the date stored in the lock file, along with the interval specified on the command-line. The command will only run when the time goes past this combined value. However, the run command MUST RETURN AN EXIT STATUS OF 0. For any other exit status it is assumed the command failed, and the wait interval is cancelled by deleting any lockfiles that the -i option was specified before. In this manner `-i` is positional like `-d`, and specifies lockfiles to be deleted if the run command fails. 
 
 The `-i` option accepts a suffix of 'm' for minutes, 'h' for hours or 'd' for days. Without a suffix, it assumes the value is seconds.
 
@@ -159,7 +159,7 @@ getlock -N -w -t 10 -b file1.lck
 
 
 ```
-getlock -i 5d -d /var/locks/backup.lck "tar -zcO mydir | ssh backuphost 'tar -zxf -'"
+getlock -i 5d /var/locks/backup.lck "tar -zcO mydir | ssh backuphost 'tar -zxf -'"
 ```
 	Only run the command if we get a lock on /var/locks/backup.lck and command has not run for 5 days. Note the use of the `-d` flag to ensure that, if the command fails to run (ssh returns something other than 0) the lockfile will be deleted so the command can be tried again and again until it suceeds.
 

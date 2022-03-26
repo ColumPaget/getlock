@@ -50,7 +50,7 @@ typedef struct
 
 TSettings Settings;
 
-char *Version="1.1";
+char *Version="2.0";
 
 
 void SigHandler(int sig)
@@ -106,9 +106,10 @@ void PrintUsage()
     printf("%-8s %s\n","-h","this help");
     printf("%-8s %s\n","-help","this help");
     printf("%-8s %s\n","--help","this help");
-    printf("\n	The flags -d -s -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.\n");
-    printf("	-k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than %d bytes, as they are too big to only contain a Process ID\n\n", MAX_PIDFILE_SIZE);
-    printf("   -C is used in situations where you want to allow child processes to be launched without holding a lock. Normally, when running a program or script, one wants to hold a lock file until not only the program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running in the background.\n");
+    printf("\n  The flags -d -s -i -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.\n\n");
+    printf("  -k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than %d bytes, as they are too big to only contain a Process ID\n\n", MAX_PIDFILE_SIZE);
+		printf("  -i both specifies the period of time between runs of the command, and is also a positional lock-file modifier, like -d. Thus it specifies lockfiles that will be used to store a timestamp, and which will be deleted if the run command fails (returns an exit status other than 0). In this way if the command fails, it can be immedialtely tried again. If it succeeds it will not run again until the interval expires.\n\n");
+    printf("  -C is used in situations where you want to allow child processes to be launched without holding a lock. Normally, when running a program or script, one wants to hold a lock file until not only the program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running in the background.\n\n");
     printf("RETURN VALUE: 0 on lock, 1 if bad args on the command line, 3 if failed to get lock. Works with bash-style 'if'\n\n");
     printf("EXAMPLES:\n");
     printf("getlock /tmp/file1.lck /var/lock/file2.lck \"echo Got locks!\"\n");
