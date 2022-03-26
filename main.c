@@ -14,6 +14,7 @@
 #define FLAG_SILENT 1024
 #define FLAG_DEBUG 2048
 #define FLAG_NOHUP 4096
+#define FLAG_INTERVAL_FILE 8192
 
 #define RESULT_GOTLOCK 0
 #define RESULT_BADARGS 1
@@ -153,6 +154,7 @@ if (ptr)
 	}
 }
 
+if (Settings.Flags & FLAG_DEBUG) printf("Interval %d\n", val);
 return(val);
 }
 
@@ -349,7 +351,7 @@ int LockAll(ListNode *LockFiles, int Flags)
 }
 
 
-void DeleteFiles(ListNode *LockFiles)
+void DeleteFiles(ListNode *LockFiles, int RequiredFlag)
 {
     ListNode *Curr;
     TLockFile *LF;
@@ -358,7 +360,7 @@ void DeleteFiles(ListNode *LockFiles)
     while (Curr)
     {
         LF=(TLockFile *) Curr->Item;
-				if (LF->Flags & FLAG_DELETE_FILE) unlink(LF->Path);
+				if (LF->Flags & RequiredFlag) unlink(LF->Path);
         Curr=ListGetNext(Curr);
     }
 }
@@ -411,7 +413,8 @@ int ProcessLocks(int NotifyFD)
 
         //Actually run program or script!
         ExitCode=system(Settings.Program);
-    		if (ExitCode != 0) DeleteFiles(Settings.LockFiles);
+				if (Settings.Flags & FLAG_DEBUG) printf("Run: %s ExitStatus: %d\n", Settings.Program, ExitCode);
+    		if (ExitCode != 0) DeleteFiles(Settings.LockFiles, FLAG_INTERVAL_FILE);
     }
     else
     {
@@ -422,7 +425,7 @@ int ProcessLocks(int NotifyFD)
         }
     }
 
-    if (GotLock) DeleteFiles(Settings.LockFiles);
+    if (GotLock) DeleteFiles(Settings.LockFiles, FLAG_DELETE_FILE);
 
 
     free(Tempstr);
