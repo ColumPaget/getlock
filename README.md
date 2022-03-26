@@ -1,7 +1,7 @@
 WHAT IS IT
 ==========
 
-It's a program that locks files using kernel-locks, and then optionally runs a program. It can fork itself into the background while holding a lock, so that it can be used in shell scripts.
+It's a program that locks files using kernel-locks, and then optionally runs a program. It can fork itself into the background while holding a lock, so that it can be used in shell scripts. It has a lot of options to seize locks, only run a program after a certain interval, lock multiple files, etc, etc.
 
 
 AUTHOR
@@ -30,7 +30,7 @@ After unpacking the tar-ball:
 Do the usual './configure; make; make install'
 
 ```
-    cd movgrab-1.0
+    cd getlock-2.0
     ./configure
     make
     make install
@@ -56,18 +56,19 @@ getlock [options] LockFilePath [LockFilePath] ... Program
 
 -a <n>	 Abandon running program/script after 'n' seconds, kill all subprocesses and exit, useful if script 'hangs'
 -b       Fork into background when got lock
--d       delete lockfile when done
+-d       Delete lockfile when done
 -n       'nohup', ignore SIGHUP
--nohup   ignore SIGHUP
--w       wait for lock (default is do not wait)
--t <n>   timeout <n> secs on wait (default is wait forever if -w used)
+-nohup   Ignore SIGHUP
+-w       Wait for lock (default is do not wait)
+-t <n>   Timeout <n> secs on wait (default is wait forever if -w used)
+-i <n>   Wait <n> secs between runs of program. See 'RUN INTERVAL' below.
 -s       SAFE MODE, do not write pid into file
 -C       Close on exec, this prevents lockfiles being inherited by the child process.
 -D       Debug. Print what you're doing.
 -S       Silent. No error messages.
 -F       Run specified program if can't get lock
 -N       NO PROGRAM, just lock files, use with -w
--X       execute program even if lock fails!
+-X       Execute program even if lock fails!
 -g <n>   Gracetime, wait <n> secs before doing kills
 -k       Send SIGTERM to lockfile owner
 -K       Send SIGKILL (kill -9) to lockfile owner
@@ -88,7 +89,9 @@ The flags -d -s -k and -K are positional, lockfiles given before them on the com
 RUN INTERVAL
 ============
 
-The `-i` option prevents a command from running until a timeout has expired. It uses the date stored in the lock file, along with the interval specified on the command-line. The command will only run when the time goes past this combined value. However, the run command MUST RETURN AN EXIT STATUS OF 0. For any other exit status it is assumed the command failed, and lockfiles are deleted (provided that the -d option was specified before they were listed on the command-line).
+The `-i` option prevents a command from running until a timeout has expired. It uses the date stored in the lock file, along with the interval specified on the command-line. The command will only run when the time goes past this combined value. However, the run command MUST RETURN AN EXIT STATUS OF 0. For any other exit status it is assumed the command failed, and the wait interval is cancelled by deleting any lockfiles that the -d option was specified for.
+
+The `-i` option accepts a suffix of 'm' for minutes, 'h' for hours or 'd' for days. Without a suffix, it assumes the value is seconds.
 
 This allows trying a command repeatedly, until it succeeds, and then not trying it again until a timeout has expired. This might be used for backups that process when a network comes up, but should only run once a day.
 
@@ -153,4 +156,13 @@ getlock -N -w -b file1.lck
 getlock -N -w -t 10 -b file1.lck
 ```
 	As above, but only wait ten secs for lock, and only hold lock for ten secs.
+
+
+```
+getlock -i 5d -d /var/locks/backup.lck "tar -zcO mydir | ssh backuphost 'tar -zxf -'"
+```
+	Only run the command if we get a lock on /var/locks/backup.lck and command has not run for 5 days. Note the use of the `-d` flag to ensure that, if the command fails to run (ssh returns something other than 0) the lockfile will be deleted so the command can be tried again and again until it suceeds.
+
+
+
 
