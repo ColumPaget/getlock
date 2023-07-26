@@ -1,7 +1,7 @@
 WHAT IS IT
 ==========
 
-It's a program that locks files using kernel-locks, and then optionally runs a program. It can fork itself into the background while holding a lock, so that it can be used in shell scripts. It has a lot of options to seize locks, only run a program after a certain interval, lock multiple files, etc, etc.
+It's a program that locks files using kernel-locks, and then optionally runs a program. The main use of this is to prevent two copies of a program running at the same time, or to prevent programs from accessing the same resource at the same time. It can fork itself into the background while holding a lock, so that it can be used in shell scripts. It has a lot of options to seize locks, only run a program after a certain interval, lock multiple files, etc, etc.
 
 
 AUTHOR
@@ -40,9 +40,9 @@ Do the usual './configure; make; make install'
 USAGE
 =====
 
-In it's simplest form, getlock takes a list of one or more lockfiles, followed by a program to run (the last argument). It tries to lock the files using kernel 'lockf' locking. If it can lock them all, then it runs the program. It's default behavior is to exit if it can't get all the locks on the first try, using the -w flag (optionally with the -t flag) can pursuade it to try repeatedly to get the locks, either forever or until some timeout. 
+In its simplest form, getlock takes a list of one or more lockfiles, followed by a program to run (the last argument). It tries to lock the files using kernel 'lockf' locking. If it can lock them all, then it runs the program. It's default behavior is to exit if it can't get all the locks on the first try, using the -w flag (optionally with the -t flag) can pursuade it to try repeatedly to get the locks, either forever or until some timeout. 
 
-By default getlock writes its Process ID into the lockfiles, though this can be suppressed with the -s option. It will not do this for files larger than 20 bytes though, as files that big are probably not lockfiles, but data files that it shouldn't overwrite!
+By default getlock writes its Process ID into the lockfiles, though this can be suppressed with the -s option. It will not do this for files larger than 25 bytes though, as files that big are probably not lockfiles, but data files that it shouldn't overwrite!
 
 getlock can be used within shell scripts by using the -b argument to make it fork into the background once it has the lock, the -w argument to make it hold the lock once it's got it, and the -N argument to tell it not to run a program, just to lock the files and hold the lock. When the shell script exits, it should get the pid of the getlock process from one of the lockfiles, and then kill the getlock to release the lock.
 
@@ -51,24 +51,28 @@ COMMAND
 =======
 
 ```
-getlock [options] LockFilePath [LockFilePath] ... Program
+	getlock [options] LockFilePath [LockFilePath] ... Program
 
 
--a <n>	 Abandon running program/script after 'n' seconds, kill all subprocesses and exit, useful if script 'hangs'
+-a <seconds> Abandon running task, killall subprocesses and exit after <seconds>
 -b       Fork into background when got lock
--d       Delete lockfile when done
+-d       delete lockfile when done
 -n       'nohup', ignore SIGHUP
--nohup   Ignore SIGHUP
--w       Wait for lock (default is do not wait)
--t <n>   Timeout <n> secs on wait (default is wait forever if -w used)
--i <n>   Wait <n> secs between runs of program. See 'RUN INTERVAL' below.
+-nohup   ignore SIGHUP
+-w       wait for lock (default is do not wait)
+-t <n>   timeout <n> secs on wait (default is wait forever if -w used)
+-i <n>   interval between runs. Defauts to seconds, suffix with 'm' for minutes, 'h' for hours, 'd' for days.
 -s       SAFE MODE, do not write pid into file
 -C       Close on exec, this prevents lockfiles being inherited by the child process.
 -D       Debug. Print what you're doing.
--S       Silent. No error messages.
+-R       Restart program if it exits.
+-q <n>   Restart interval. Milliseconds delay between restart attempts.
+-S       Silent. No error/info/debug messages.
+-L       Send error/info/debug messages to syslog.
+-syslog  Send error/info/debug messages to syslog.
 -F       Run specified program if can't get lock
 -N       NO PROGRAM, just lock files, use with -w
--X       Execute program even if lock fails!
+-X       execute program even if lock fails!
 -g <n>   Gracetime, wait <n> secs before doing kills
 -k       Send SIGTERM to lockfile owner
 -K       Send SIGKILL (kill -9) to lockfile owner
@@ -78,22 +82,57 @@ getlock [options] LockFilePath [LockFilePath] ... Program
 -group <group> Run as group
 -v       print version
 -version print version
+--version print version
 -?       this help
+-h       this help
+-help    this help
+--help   this help
+```
+
+
+Note that if you wish to pass arguments to the program that getlock runs, then you must quote it like this: 
+
+```
+getlock /var/lock/lockfile.lck "/usr/bin/md5sum /tmp/*"
 ```
 
 The flags -d -s -i -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.
 
--k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it. Similarly -i uses a date written to the lock file, and so will also not work with -s. getlock will also refuse to write into files bigger than 25 bytes, as they are too big to only contain a Process ID and timestamp.
+
+LOCKFILES
+=========
+
+Getlock writes it's Process ID (PID) to the lockfile and also a timestamp. However, if the file already exists, and is larger than 25 bytes long, then getlock will refuse to write to it, as the file clearly contains more data than just a PID and timestamp. Lockfiles are locked with kernel locking mechanisms that are released automatically when getlock and all it's child processes exit.
+
+
+CHILD PROCESS LOCKS
+===================
+
+The `-C` option  is used in situations where you want to allow child processes to be launched without holding a lock. Normally all programs launched by 'getlock' inherit a lock on the file, so that even if getlock exits, any child process should still be holding the lock. When running a program or script one usually wants to hold a lock file until not only the parent program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running.
+
+
+KILLING LOCKFILE HOLDERS
+========================
+
+The `-k` and `-K` options allow getlock to kill any other programs holding a lock on a lockfile, by sending 'kill' to the existing process. These options only work if the lock file owner has written their pid into a file. This file can be any pidfile, although getlock will then write its own pid to that file and lock it. For getlock writing the pid is the default behavior, but `-s` prevents it.
 
 
 RUN INTERVAL
 ============
 
-The `-i` option prevents a command from running until a timeout has expired. It uses the date stored in the lock file, along with the interval specified on the command-line. The command will only run when the time goes past this combined value. However, the run command MUST RETURN AN EXIT STATUS OF 0. For any other exit status it is assumed the command failed, and the wait interval is cancelled by deleting any lockfiles that the -i option was specified before. In this manner `-i` is positional like `-d`, and specifies lockfiles to be deleted if the run command fails. 
+The `-i` option prevents a command from running until a timeout has expired. It accepts a suffix of 'm' for minutes, 'h' for hours or 'd' for days. Without a suffix, it assumes the value is seconds. It uses the date stored in the lock file, along with the interval specified on the command-line. getlock will only run programs when the time goes past this combined value. 
 
-The `-i` option accepts a suffix of 'm' for minutes, 'h' for hours or 'd' for days. Without a suffix, it assumes the value is seconds.
+However, the program run by getlock MUST RETURN AN EXIT STATUS OF 0. For any other exit status it is assumed the command failed, and the wait interval is cancelled by deleting any lockfiles that the '-i' option was specified before. In this manner `-i` is positional like `-d`, and specifies lockfiles to be deleted if the run command fails. 
+
 
 This allows trying a command repeatedly, until it succeeds, and then not trying it again until a timeout has expired. This might be used for backups that process when a network comes up, but should only run once a day.
+
+
+PROGRAM RESTART
+===============
+
+The `-R` option restarts a program if it exits. This implies that a getlock launched with this configuration will run forever, unless the getlock process itself is terminated. The '-q' option allows specifying a number of milliseconds 'dwell time' before launching the process again. The default dwell time is 100 milliseconds. Beware of setting this to '0', as a program that fails to run will attempt restart over and over again, burning up CPU resources.
+
 
 RETURN VALUE 
 ============

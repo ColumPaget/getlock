@@ -1,5 +1,12 @@
 
+#ifdef HAVE_LIBUSEFUL4
 #include "libUseful-4/libUseful.h"
+#else
+#include "libUseful-5/libUseful.h"
+#endif
+
+#include <stdarg.h>
+#include <syslog.h>
 
 #define FLAG_WAIT 1
 #define FLAG_RUN_ANYWAY 2
@@ -15,6 +22,8 @@
 #define FLAG_DEBUG 2048
 #define FLAG_NOHUP 4096
 #define FLAG_INTERVAL_FILE 8192
+#define FLAG_RESTART 16384
+#define FLAG_SYSLOG  32768
 
 #define RESULT_GOTLOCK 0
 #define RESULT_BADARGS 1
@@ -41,6 +50,7 @@ typedef struct
     int GraceTime;
     int AbandonTime;
     int Interval;
+    int RestartInterval;
     ListNode *LockFiles;
     char *Program;
     char *OnFail;
@@ -50,7 +60,38 @@ typedef struct
 
 TSettings Settings;
 
-char *Version="2.0";
+char *Version="3.0";
+
+void OpenSysLog()
+{
+    if (Settings.Flags & FLAG_SYSLOG)
+    {
+        openlog(NULL, LOG_NDELAY | LOG_PID, LOG_DAEMON);
+    }
+}
+
+void LogEvent(int Level, const char *Fmt, ...)
+{
+    va_list args;
+    char *Tempstr=NULL;
+
+    va_start(args, Fmt);
+    Tempstr=VFormatStr(Tempstr, Fmt, args);
+    va_end(args);
+
+    if (! (Settings.Flags & FLAG_SILENT))
+    {
+        if ( (Level != LOG_DEBUG) || (Settings.Flags & FLAG_DEBUG) ) printf("%s %s\n", GetDateStr("%Y-%m-%dT%H:%M:%S",NULL),  Tempstr);
+    }
+
+    if (Settings.Flags & FLAG_SYSLOG)
+    {
+        if (! StrValid(Settings.Program)) syslog(Level, "(no program) %s", Tempstr);
+        syslog(Level, "(%s) %s", Settings.Program, Tempstr);
+    }
+
+    Destroy(Tempstr);
+}
 
 
 void SigHandler(int sig)
@@ -60,7 +101,6 @@ void SigHandler(int sig)
         kill(0,SIGKILL);
         exit(1);
     }
-
 }
 
 
@@ -88,7 +128,11 @@ void PrintUsage()
     printf("%-8s %s\n","-s","SAFE MODE, do not write pid into file");
     printf("%-8s %s\n","-C","Close on exec, this prevents lockfiles being inherited by the child process.");
     printf("%-8s %s\n","-D","Debug. Print what you're doing.");
-    printf("%-8s %s\n","-S","Silent. No error messages.");
+    printf("%-8s %s\n","-R","Restart program if it exits.");
+    printf("%-8s %s\n","-q <n>","Restart interval. Milliseconds delay between restart attempts.");
+    printf("%-8s %s\n","-S","Silent. No error/info/debug messages.");
+    printf("%-8s %s\n","-L","Send error/info/debug messages to syslog.");
+    printf("%-8s %s\n","-syslog","Send error/info/debug messages to syslog.");
     printf("%-8s %s\n","-F","Run specified program if can't get lock");
     printf("%-8s %s\n","-N","NO PROGRAM, just lock files, use with -w");
     printf("%-8s %s\n","-X","execute program even if lock fails!");
@@ -108,8 +152,9 @@ void PrintUsage()
     printf("%-8s %s\n","--help","this help");
     printf("\n  The flags -d -s -i -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.\n\n");
     printf("  -k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than %d bytes, as they are too big to only contain a Process ID\n\n", MAX_PIDFILE_SIZE);
-		printf("  -i both specifies the period of time between runs of the command, and is also a positional lock-file modifier, like -d. Thus it specifies lockfiles that will be used to store a timestamp, and which will be deleted if the run command fails (returns an exit status other than 0). In this way if the command fails, it can be immedialtely tried again. If it succeeds it will not run again until the interval expires.\n\n");
+    printf("  -i specifies an interval of time between runs. It uses the timestamp stored in lockfiles. It will not run until that timestamp, plus the interval, specifies a time that's in the past. It is a positional lock-file modifier, like -d. Thus it specifies lockfiles that will be used to store a timestamp, and which will be deleted if the run command fails (returns an exit status other than 0). In this way if the command fails, it can be immedialtely tried again. If it succeeds it will not run again until the interval expires.\n\n");
     printf("  -C is used in situations where you want to allow child processes to be launched without holding a lock. Normally, when running a program or script, one wants to hold a lock file until not only the program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running in the background.\n\n");
+    printf("  -R restarts the launched program if it exits. This implies getlock will run forever unless the getlock process itself is terminated. The '-q' option allows specifying a 'dwell time' in milliseconds between restarts. Beware of setting this to zero, as a program that fails to startup will be launched over and over, fast as possible, burning up CPU resources.\n\n");
     printf("RETURN VALUE: 0 on lock, 1 if bad args on the command line, 3 if failed to get lock. Works with bash-style 'if'\n\n");
     printf("EXAMPLES:\n");
     printf("getlock /tmp/file1.lck /var/lock/file2.lck \"echo Got locks!\"\n");
@@ -141,22 +186,28 @@ void PrintUsage()
 
 int ParseInterval(const char *Config)
 {
-int val;
-char *ptr;
+    int val;
+    char *ptr;
 
-val=strtol(Config, &ptr, 10);
-if (ptr)
-{
-	switch (*ptr)
-	{
-		case 'm': val *= 60; break;
-		case 'h': val *= 3600; break;
-		case 'd': val *= 24 * 3600; break;
-	}
-}
+    val=strtol(Config, &ptr, 10);
+    if (ptr)
+    {
+        switch (*ptr)
+        {
+        case 'm':
+            val *= 60;
+            break;
+        case 'h':
+            val *= 3600;
+            break;
+        case 'd':
+            val *= 24 * 3600;
+            break;
+        }
+    }
 
-if (Settings.Flags & FLAG_DEBUG) printf("Interval %d\n", val);
-return(val);
+    LogEvent(LOG_DEBUG, "Interval %d", val);
+    return(val);
 }
 
 
@@ -167,6 +218,8 @@ void ParseArgs(int argc, char *argv[])
     int i;
 
     memset(&Settings, 0, sizeof(Settings));
+    Settings.RestartInterval=100; //100 milliseconds
+
     Settings.LockFiles=ListCreate();
 
     for (i=1; i < argc; i++)
@@ -174,6 +227,10 @@ void ParseArgs(int argc, char *argv[])
         if (! StrLen(argv[i])) continue;
         if (strcmp(argv[i],"-w")==0) Settings.Flags |= FLAG_WAIT;
         else if (strcmp(argv[i],"-a")==0) Settings.AbandonTime = atoi(argv[++i]);
+        else if (strcmp(argv[i],"-g")==0) Settings.GraceTime=atoi(argv[++i]);
+        else if (strcmp(argv[i],"-i")==0) Settings.Interval=ParseInterval(argv[++i]);
+        else if (strcmp(argv[i],"-q")==0) Settings.RestartInterval=atoi(argv[++i]);
+        else if (strcmp(argv[i],"-t")==0) Settings.Timeout=atoi(argv[++i]);
         else if (strcmp(argv[i],"-b")==0) Settings.Flags |= FLAG_BACKGROUND;
         else if (strcmp(argv[i],"-d")==0) Settings.Flags |= FLAG_DELETE_FILE;
         else if (strcmp(argv[i],"-n")==0) Settings.Flags |= FLAG_NOHUP;
@@ -184,16 +241,16 @@ void ParseArgs(int argc, char *argv[])
         else if (strcmp(argv[i],"-N")==0) Settings.Flags |= FLAG_NO_PROGRAM;
         else if (strcmp(argv[i],"-D")==0) Settings.Flags |= FLAG_DEBUG;
         else if (strcmp(argv[i],"-S")==0) Settings.Flags |= FLAG_SILENT;
-        else if (strcmp(argv[i],"-g")==0) Settings.GraceTime=atoi(argv[++i]);
+        else if (strcmp(argv[i],"-R")==0) Settings.Flags |= FLAG_RESTART;
         else if (strcmp(argv[i],"-k")==0) Settings.Flags |= FLAG_TERM_OWNER;
         else if (strcmp(argv[i],"-K")==0) Settings.Flags |= FLAG_KILL_OWNER;
+        else if (strcmp(argv[i],"-L")==0) Settings.Flags |= FLAG_SYSLOG;
+        else if (strcmp(argv[i],"-syslog")==0) Settings.Flags |= FLAG_SYSLOG;
         else if (strcmp(argv[i],"-F")==0) Settings.OnFail=CopyStr(Settings.OnFail,argv[++i]);
         else if (strcmp(argv[i],"-U")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
         else if (strcmp(argv[i],"-user")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
         else if (strcmp(argv[i],"-G")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
         else if (strcmp(argv[i],"-group")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
-        else if (strcmp(argv[i],"-t")==0) Settings.Timeout=atoi(argv[++i]);
-        else if (strcmp(argv[i],"-i")==0) Settings.Interval=ParseInterval(argv[++i]);
         else if (
             (strcmp(argv[i],"-v")==0) ||
             (strcmp(argv[i],"-version")==0) ||
@@ -258,11 +315,11 @@ void CommitLock(TLockFile *LF)
 
     if (LF->Flags & FLAG_NO_WRITE)
     {
-        if (Settings.Flags & FLAG_DEBUG) printf("Not writing pid to file.\n");
+        LogEvent(LOG_DEBUG, "Not writing pid to file.");
     }
     else if (FStat.st_size > MAX_PIDFILE_SIZE)
     {
-        if (! (Settings.Flags & FLAG_SILENT)) printf("File size is greater than %d bytes, probably not a lockfile! Not writing pid to file!\n", MAX_PIDFILE_SIZE);
+        LogEvent(LOG_ERR, "File size is greater than %d bytes, probably not a lockfile! Not writing pid to file!", MAX_PIDFILE_SIZE);
     }
     else
     {
@@ -291,27 +348,27 @@ int DoLock(TLockFile *LF, int *OwnerPid)
     if (LF->fd==-1) LF->fd=open(LF->Path, oflags, 0666);
     if (LF->fd==-1)
     {
-        if (! (Settings.Flags & FLAG_SILENT)) printf("Couldn't open lock file\n");
+        LogEvent(LOG_ERR, "Couldn't open lock file: %s", LF->Path);
         return(LOCK_FAIL);
     }
 
-		time(&Now);
+    time(&Now);
     ReadLockFile(LF, OwnerPid, &LockTime);
     if (lockf(LF->fd,F_TLOCK,0)==0)
     {
         result=LOCK_OKAY;
 
-        if (Settings.Flags & FLAG_DEBUG) printf("GOT LOCK ON %s\n",LF->Path);
+        if (Settings.Flags & FLAG_DEBUG) LogEvent(LOG_DEBUG, "GOT LOCK ON %s", LF->Path);
 
         if ((Settings.Interval > 0) && ((LockTime + Settings.Interval) > Now))
         {
-						Tempstr=CopyStr(Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime, NULL));
-            if (Settings.Flags & FLAG_DEBUG) printf("Not yet time for next run. Previous: %s Next: %s\n", Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime + Settings.Interval, NULL) );
+            Tempstr=CopyStr(Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime, NULL));
+            LogEvent(LOG_DEBUG, "Not yet time for next run. Previous: %s Next: %s", Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime + Settings.Interval, NULL) );
             result=LOCK_NOT_TIME;
         }
         else CommitLock(LF);
     }
-    else if (Settings.Flags & FLAG_DEBUG) printf("FILE: %s is locked by PID: %d\n",LF->Path,*OwnerPid);
+    else LogEvent(LOG_DEBUG, "FILE: %s is locked by PID: %d",LF->Path,*OwnerPid);
 
 
     DestroyString(Tempstr);
@@ -361,11 +418,39 @@ void DeleteFiles(ListNode *LockFiles, int RequiredFlag)
     while (Curr)
     {
         LF=(TLockFile *) Curr->Item;
-				if (LF->Flags & RequiredFlag) unlink(LF->Path);
+        if (LF->Flags & RequiredFlag) unlink(LF->Path);
         Curr=ListGetNext(Curr);
     }
 }
 
+
+void RunProgram()
+{
+    int ExitCode;
+
+    //assume we will restart the program
+    while (1)
+    {
+        if (Settings.AbandonTime > 0)
+        {
+            setsid();
+            signal(SIGALRM,SigHandler);
+            alarm(Settings.AbandonTime);
+        }
+
+        //Actually run program or script!
+        LogEvent(LOG_INFO, "Run: %s", Settings.Program);
+        ExitCode=system(Settings.Program);
+        LogEvent(LOG_INFO, "Exited: %s ExitStatus: %d", Settings.Program, ExitCode);
+        if (ExitCode != 0) DeleteFiles(Settings.LockFiles, FLAG_INTERVAL_FILE);
+
+        //if 'restart' is not active, then exit loop
+        if (! (Settings.Flags & FLAG_RESTART)) break;
+
+        usleep(Settings.RestartInterval * 1000);
+        LogEvent(LOG_DEBUG, "Restart: %s", Settings.Program);
+    }
+}
 
 
 int ProcessLocks(int NotifyFD)
@@ -380,7 +465,7 @@ int ProcessLocks(int NotifyFD)
     while (1)
     {
         time(&Now);
-        if	((Now-Start) > Settings.GraceTime) Flags=FLAG_TERM_OWNER | FLAG_KILL_OWNER;
+        if ((Now-Start) > Settings.GraceTime) Flags=FLAG_TERM_OWNER | FLAG_KILL_OWNER;
         GotLock=LockAll(Settings.LockFiles, Flags);
         if (GotLock) break;
         if (! (Settings.Flags & FLAG_WAIT)) break;
@@ -396,27 +481,14 @@ int ProcessLocks(int NotifyFD)
 
     if (! GotLock)
     {
-        if (! (Settings.Flags & FLAG_SILENT)) printf("Couldn't lock file\n");
+        LogEvent(LOG_ERR, "Couldn't lock file");
         if (StrLen(Settings.OnFail)) system(Settings.OnFail);
         if (NotifyFD > -1) write(NotifyFD,"N\n",2);
         if (! (Settings.Flags & FLAG_RUN_ANYWAY)) exit(RESULT_NOLOCK);
     }
     else if (NotifyFD > -1) write(NotifyFD,"Y\n",2);
 
-    if (StrLen(Settings.Program))
-    {
-        if (Settings.AbandonTime > 0)
-        {
-            setsid();
-            signal(SIGALRM,SigHandler);
-            alarm(Settings.AbandonTime);
-        }
-
-        //Actually run program or script!
-        ExitCode=system(Settings.Program);
-				if (Settings.Flags & FLAG_DEBUG) printf("Run: %s ExitStatus: %d\n", Settings.Program, ExitCode);
-    		if (ExitCode != 0) DeleteFiles(Settings.LockFiles, FLAG_INTERVAL_FILE);
-    }
+    if (StrLen(Settings.Program)) RunProgram();
     else
     {
         if (Settings.Flags & FLAG_WAIT)
@@ -444,13 +516,14 @@ main(int argc, char *argv[])
 
     ParseArgs(argc,argv);
 
+    OpenSysLog();
     if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
     if (StrLen(Settings.User)) SwitchUser(Settings.User);
 
 
     if (! ListSize(Settings.LockFiles))
     {
-        if (! (Settings.Flags & FLAG_SILENT)) printf("ERROR: No Lockfile Path Given! Use -? to get more help.\n");
+        LogEvent(LOG_ERR, "ERROR: No Lockfile Path Given! Use -? to get more help.");
         exit(RESULT_BADARGS);
     }
 
@@ -458,14 +531,11 @@ main(int argc, char *argv[])
     {
         if (Settings.Flags & FLAG_NO_PROGRAM)
         {
-            if (! (Settings.Flags & FLAG_SILENT))
-            {
-                printf("Running without executing client program, just locking files\n");
-            }
+            LogEvent(LOG_INFO, "Running without executing client program, just locking files");
         }
         else
         {
-            if (! (Settings.Flags & FLAG_SILENT) ) printf("ERROR: No Program Path Given! Use -? to get more help.\n");
+            LogEvent(LOG_ERR, "ERROR: No Program Path Given! Use -? to get more help.");
             exit(RESULT_BADARGS);
         }
     }
@@ -484,7 +554,7 @@ main(int argc, char *argv[])
         }
         else
         {
-						//read from child, it will inform us by sending 'Y' if it got the lock
+            //read from child, it will inform us by sending 'Y' if it got the lock
             Tempstr=SetStrLen(Tempstr,10);
             result=read(pfds[0],Tempstr,10);
             if (result > 0)

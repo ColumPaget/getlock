@@ -7,12 +7,14 @@ INSTALL=@INSTALL@
 prefix=@prefix@
 bindir=$(prefix)@bindir@
 
-all: 
-	@cd libUseful-4; $(MAKE)
-	$(CC) $(FLAGS) $(LIBS) -g -ogetlock main.c libUseful-4/libUseful-4.a
+all: @LIBUSEFUL_BUNDLED@
+	$(CC) $(FLAGS) -g -ogetlock main.c $(LIBS) @LIBUSEFUL_BUNDLED@
+
+libUseful-5/libUseful.a:
+	$(MAKE) -C libUseful-5
 
 clean:
-	@rm -f getlock libUseful-4/*.o libUseful-4/*.a libUseful-4/*.so
+	@rm -f getlock libUseful-5/*.o libUseful-5/*.a libUseful-5/*.so
 
 install:
 	$(INSTALL) getlock $(bindir)
