@@ -29,7 +29,7 @@ static const char *ParseHostDetailsExtractAuth(const char *Data, char **User, ch
 const char *ParseHostDetails(const char *Data, char **Host,char **Port,char **User, char **Password)
 {
     char *Token=NULL;
-    const char *ptr, *tptr;
+    const char *ptr;
 
     if (Port) *Port=CopyStr(*Port, "");
     if (Host) *Host=CopyStr(*Host, "");
@@ -43,8 +43,7 @@ const char *ParseHostDetails(const char *Data, char **Host,char **Port,char **Us
 //hence we have to enclose them in square braces, which we must handle here
     if (*ptr == '[')
     {
-        tptr=ptr+1;
-        ptr=GetToken(ptr+1, "]", &Token, 0);
+        ptr=GetToken(ptr, "]", &Token, GETTOKEN_APPEND_SEP);
         if (Host) *Host=CopyStr(*Host, Token);
         if (*ptr == ':') ptr++;
     }
@@ -61,8 +60,9 @@ const char *ParseHostDetails(const char *Data, char **Host,char **Port,char **Us
     return(ptr);
 }
 
+#define FLAG_GUESS_PORT 1
 
-void ParseURL(const char *URL, char **Proto, char **Host, char **Port, char **User, char **Password, char **Path, char **Args)
+static void DecodeURL(const char *URL, char **Proto, char **Host, char **Port, char **User, char **Password, char **Path, char **Args, int Flags)
 {
     const char *ptr;
     char *Token=NULL, *tProto=NULL, *aptr;
@@ -121,19 +121,21 @@ void ParseURL(const char *URL, char **Proto, char **Host, char **Port, char **Us
         }
     }
 
-//the 'GetToken' call will have thrown away the '/' at the start of the path
-//add it back in
 
-    if (Port && (! StrValid(*Port)) && StrValid(tProto))
+
+    if (Flags & FLAG_GUESS_PORT)
     {
-        if (CompareStr(tProto,"http")==0) *Port=CopyStr(*Port,"80");
-        else if (CompareStr(tProto,"https")==0) *Port=CopyStr(*Port,"443");
-        else if (CompareStr(tProto,"ssh")==0) *Port=CopyStr(*Port,"22");
-        else if (CompareStr(tProto,"ftp")==0) *Port=CopyStr(*Port,"21");
-        else if (CompareStr(tProto,"telnet")==0) *Port=CopyStr(*Port,"23");
-        else if (CompareStr(tProto,"smtp")==0) *Port=CopyStr(*Port,"25");
-        else if (CompareStr(tProto,"mailto")==0) *Port=CopyStr(*Port,"25");
+        if (Port && (! StrValid(*Port)) && StrValid(tProto))
+        {
+            if (CompareStr(tProto,"http")==0) *Port=CopyStr(*Port,"80");
+            else if (CompareStr(tProto,"https")==0) *Port=CopyStr(*Port,"443");
+            else if (CompareStr(tProto,"ssh")==0) *Port=CopyStr(*Port,"22");
+            else if (CompareStr(tProto,"ftp")==0) *Port=CopyStr(*Port,"21");
+            else if (CompareStr(tProto,"telnet")==0) *Port=CopyStr(*Port,"23");
+            else if (CompareStr(tProto,"smtp")==0) *Port=CopyStr(*Port,"25");
+            else if (CompareStr(tProto,"mailto")==0) *Port=CopyStr(*Port,"25");
 
+        }
     }
 
 
@@ -141,7 +143,15 @@ void ParseURL(const char *URL, char **Proto, char **Host, char **Port, char **Us
     DestroyString(tProto);
 }
 
+void UnpackURL(const char *URL, char **Proto, char **Host, char **Port, char **User, char **Password, char **Path, char **Args)
+{
+    return(DecodeURL(URL, Proto, Host, Port, User, Password, Path, Args, 0));
+}
 
+void ParseURL(const char *URL, char **Proto, char **Host, char **Port, char **User, char **Password, char **Path, char **Args)
+{
+    return(DecodeURL(URL, Proto, Host, Port, User, Password, Path, Args, FLAG_GUESS_PORT));
+}
 
 void ParseConnectDetails(const char *Str, char **Type, char **Host, char **Port, char **User, char **Pass, char **Path)
 {

@@ -280,7 +280,6 @@ int IP4SockAddrCreate(struct sockaddr **ret_sa, const char *Addr, int Port)
 int SockAddrCreate(struct sockaddr **ret_sa, const char *Host, int Port)
 {
     const char *p_Addr="";
-    socklen_t salen;
 
     if (StrValid(Host))
     {
@@ -300,10 +299,10 @@ int SockAddrCreate(struct sockaddr **ret_sa, const char *Host, int Port)
 
 int BindSock(int Type, const char *Address, int Port, int Flags)
 {
-    int result;
     struct sockaddr *sa;
     socklen_t salen;
-    int fd;
+    int fd=-1;
+    int result=-1;
 
     salen=SockAddrCreate(&sa, Address, Port);
     if (salen==0) return(-1);
@@ -314,17 +313,22 @@ int BindSock(int Type, const char *Address, int Port, int Flags)
     }
     else fd=socket(sa->sa_family, Type, 0);
 
-    //REUSEADDR and REUSEPORT must be set BEFORE bind
-    result=1;
+
+    if (fd > -1)
+    {
+        //REUSEADDR and REUSEPORT must be set BEFORE bind
+        result=1;
 #ifdef SO_REUSEADDR
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &result, sizeof(result));
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &result, sizeof(result));
 #endif
 
 #ifdef SO_REUSEPORT
-    if (Flags & BIND_REUSEPORT) setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &result, sizeof(result));
+        if (Flags & BIND_REUSEPORT) setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &result, sizeof(result));
 #endif
 
-    result=bind(fd, sa, salen);
+        result=bind(fd, sa, salen);
+    }
+
     free(sa);
 
     if (result !=0)
@@ -348,19 +352,19 @@ int GetHostARP(const char *IP, char **Device, char **MAC)
     char *Tempstr=NULL, *Token=NULL;
     int result=FALSE;
     const char *ptr;
-    FILE *F;
+    STREAM *S;
 
     Tempstr=SetStrLen(Tempstr, 255);
-//TODO: why use fopen?
-    F=fopen("/proc/net/arp","r");
-    if (F)
+    S=STREAMOpen("/proc/net/arp","r");
+    if (S)
     {
         *Device=CopyStr(*Device,"remote");
         *MAC=CopyStr(*MAC,"remote");
         //Read Title Line
-        fgets(Tempstr,255,F);
+        Tempstr=STREAMReadLine(Tempstr, S);
 
-        while (fgets(Tempstr,255,F))
+        Tempstr=STREAMReadLine(Tempstr, S);
+        while (Tempstr)
         {
             StripTrailingWhitespace(Tempstr);
             ptr=GetToken(Tempstr," ",&Token,0);
@@ -384,8 +388,9 @@ int GetHostARP(const char *IP, char **Device, char **MAC)
 
                 result=TRUE;
             }
+            Tempstr=STREAMReadLine(Tempstr, S);
         }
-        fclose(F);
+        STREAMClose(S);
     }
 
     DestroyString(Tempstr);
@@ -407,7 +412,7 @@ int GetSockDestination(int sock, char **Host, int *Port)
 #ifdef SO_ORIGINAL_DST
     salen=sizeof(struct sockaddr_in);
 
-    if (getsockopt(sock, SOL_IP, SO_ORIGINAL_DST, (char *) &sa, &salen) ==0)
+    if (getsockopt(sock, SOL_IP, SO_ORIGINAL_DST, (char *) &sa, (unsigned int *) &salen) ==0)
     {
         *Host=SetStrLen(*Host,NI_MAXHOST);
         Tempstr=SetStrLen(Tempstr,NI_MAXSERV);
@@ -560,7 +565,6 @@ int UDPRecv(int sock,  char *Buffer, int len, char **Addr, int *Port)
     struct sockaddr_in sa;
     socklen_t salen;
     int result;
-    int fd;
 
     salen=sizeof(sa);
     result=recvfrom(sock, Buffer, len,0, (struct sockaddr *) &sa, &salen);
@@ -570,7 +574,8 @@ int UDPRecv(int sock,  char *Buffer, int len, char **Addr, int *Port)
         Tempstr=SetStrLen(Tempstr,NI_MAXSERV);
         getnameinfo((struct sockaddr *) &sa, salen, *Addr, NI_MAXHOST, Tempstr, NI_MAXSERV, NI_NUMERICHOST|NI_NUMERICSERV);
 
-        *Port=atoi(Tempstr);
+        //this argument is optional
+        if (Port) *Port=atoi(Tempstr);
     }
 
     DestroyString(Tempstr);
@@ -666,7 +671,6 @@ void IP6AddresssFromSA(struct sockaddr_storage *sa, char **ReturnAddr, int *Retu
 int GetSockDetails(int sock, char **LocalAddress, int *LocalPort, char **RemoteAddress, int *RemotePort)
 {
     socklen_t salen;
-    int result;
     struct sockaddr_storage sa;
 
     if (LocalPort) *LocalPort=0;
@@ -761,10 +765,17 @@ int IPReconnect(int sock, const char *Host, int Port, int Flags)
 }
 
 
-int NetConnectWithSettings(const char *Proto, const char *LocalHost, const char *Host, int Port, TSockSettings *Settings)
+int NetConnectWithSettings(const char *Proto, const char *LocalHost, const char *InHost, int Port, TSockSettings *Settings)
 {
     const char *p_LocalHost=LocalHost;
+    char *Host=NULL;
     int sock, result;
+
+
+    //we have preserved 'host' with '[ addr ]' wrapper for IP6 until now
+    if (*InHost=='[') Host=CopyStrLen(Host, InHost+1, StrLen(InHost)-2);
+    else Host=CopyStr(Host, InHost);
+
 
     if ((! StrValid(p_LocalHost)) && IsIP6Address(Host)) p_LocalHost="::";
     if ((strcasecmp(Proto,"udp")==0) || (strcasecmp(Proto,"bcast")==0))
@@ -774,6 +785,7 @@ int NetConnectWithSettings(const char *Proto, const char *LocalHost, const char 
     }
     else sock=BindSock(SOCK_STREAM, p_LocalHost, 0, 0);
 
+//set some options that are values rather than flags, SockSetOptions (called within IPReconnect) only handles flags
     if (Settings->TTL > 0) setsockopt(sock, IPPROTO_IP, IP_TTL, &(Settings->TTL), sizeof(int));
     if (Settings->ToS > 0) setsockopt(sock, IPPROTO_IP, IP_TOS, &(Settings->ToS), sizeof(int));
 
@@ -781,7 +793,13 @@ int NetConnectWithSettings(const char *Proto, const char *LocalHost, const char 
     if (Settings->Mark > 0) setsockopt(sock, SOL_SOCKET, SO_MARK, &(Settings->Mark), sizeof(int));
 #endif
 
+    //if a timeout is specified at connection time, then we apply it to the connection step
+    //if it's added later with STREAMAddTimeout, then it will only apply to read
+    if (Settings->Timeout > 0) Settings->Flags |= CONNECT_NONBLOCK;
     result=IPReconnect(sock, Host, Port, Settings->Flags);
+
+    Destroy(Host);
+
     if (result==-1)
     {
         close(sock);
@@ -838,13 +856,13 @@ int STREAMIsConnected(STREAM *S)
     result=IsSockConnected(S->in_fd);
     if (result==TRUE)
     {
-        if (S->State & SS_CONNECTING)
+        if (S->State & LU_SS_CONNECTING)
         {
-            S->State |= SS_CONNECTED;
-            S->State &= (~SS_CONNECTING);
+            S->State |= LU_SS_CONNECTED;
+            S->State &= (~LU_SS_CONNECTING);
         }
     }
-    if ((result==SOCK_CONNECTING) && (! (S->State & SS_CONNECTING))) result=FALSE;
+    if ((result==SOCK_CONNECTING) && (! (S->State & LU_SS_CONNECTING))) result=FALSE;
     return(result);
 }
 
@@ -879,7 +897,7 @@ int STREAMDoPostConnect(STREAM *S, int Flags)
         }
 
         result=TRUE;
-        S->State |=SS_CONNECTED;
+        S->State |=LU_SS_CONNECTED;
     }
     else
     {
@@ -954,11 +972,12 @@ int STREAMNetConnect(STREAM *S, const char *Proto, const char *Host, int Port, c
         if (S->Type==STREAM_TYPE_SSL) S->Flags |= CONNECT_SSL;
         if (S->Flags & SF_NONBLOCK)
         {
-            S->State |=SS_CONNECTING;
+            S->State |=LU_SS_CONNECTING;
             S->Flags |=SF_NONBLOCK;
         }
 
         if (STREAMWaitConnect(S)) result=STREAMDoPostConnect(S, S->Flags);
+        else result=FALSE;
     }
 
     Destroy(Name);
@@ -975,9 +994,6 @@ int STREAMConnect(STREAM *S, const char *URL, const char *Config)
     int result=FALSE;
     char *Proto=NULL, *Host=NULL, *Token=NULL, *Path=NULL;
     char *Name=NULL, *Value=NULL;
-    TSockSettings Settings;
-    const char *ptr, *p_val;
-    int Flags=0, fd;
     int Port=0;
 
 
@@ -991,6 +1007,7 @@ int STREAMConnect(STREAM *S, const char *URL, const char *Config)
     else
     {
         ParseURL(URL, &Proto, &Host, &Token, NULL, NULL, &Path, NULL);
+
         if (StrValid(Token)) Port=strtoul(Token, 0, 10);
 
         STREAMSetFlushType(S,FLUSH_LINE,0,0);

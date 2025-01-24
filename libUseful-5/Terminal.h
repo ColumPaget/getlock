@@ -19,6 +19,8 @@ and the following 'tilde command' formatting values
 ~B        switch background to blue
 ~n        switch color to black ('night' or 'noir')
 ~N        switch background to black ('night' or 'noir')
+~w        switch color to white
+~W        switch background to white
 ~y        switch color to yellow
 ~Y        switch background to yellow
 ~m        switch color to magenta
@@ -32,6 +34,8 @@ and the following 'tilde command' formatting values
 ~+B       switch background to bright blue
 ~+n       switch color to bright black ('night' or 'noir')
 ~+N       switch background to bright black ('night' or 'noir')
+~+w       switch color to bright white
+~+w       switch background to bright white 
 ~+y       switch color to bright yellow
 ~+Y       switch background to bright yellow
 ~+m       switch color to bright magenta
@@ -121,6 +125,7 @@ typedef enum {ANSI_NONE, ANSI_BLACK, ANSI_RED, ANSI_GREEN, ANSI_YELLOW, ANSI_BLU
 #define TERM_HIDETEXT  1   //hide text (default is show it)
 #define TERM_SHOWSTARS 2   //show stars instead of text (for passwords)
 #define TERM_SHOWTEXTSTARS 4 //show stars+last character typed
+#define TERM_NOCOLOR       8
 #define TERM_HIDECURSOR 32   //hide the cursor
 #define TERM_RAWKEYS 64      //switch a terminal into 'raw' mode rather than canonical (usually you want this)
 #define TERMBAR_UPPER 128
@@ -133,15 +138,21 @@ typedef enum {ANSI_NONE, ANSI_BLACK, ANSI_RED, ANSI_GREEN, ANSI_YELLOW, ANSI_BLU
 #define TERM_ALIGN_RIGHT  8192
 #define TERM_FOCUS_EVENTS 16384  //send window focusin/focusout events (these appear as keystrokes XTERM_FOCUS_IN and XTERM_FOCUS_OUT)
 
+
 //These flags can be passed in the Flags argument of ANSICode
-#define ANSI_HIDE			65536
-#define ANSI_BOLD			131072
-#define ANSI_FAINT		262144
-#define ANSI_UNDER		524288
-#define ANSI_BLINK		1048576
+#define ANSI_HIDE  65536
+#define ANSI_BOLD  131072
+#define ANSI_FAINT 262144
+#define ANSI_UNDER 524288
+#define ANSI_BLINK 1048576
 #define ANSI_INVERSE  2097152
 #define ANSI_NORM "\x1b[0m"
 #define ANSI_BACKSPACE 0x08
+
+
+//These are flags that can be set against a Terminal STREAM
+//They use STREAM flags that are meaningless for terminals
+#define TERM_STREAM_NOCOLOR SF_BINARY
 
 
 // Specify if system supports utf8. This is global for all terminals. 'level' can be
@@ -174,14 +185,37 @@ char *TerminalStripControlSequences(char *RetStr, const char *Str);
 
 // initialize STREAM to be a terminal. This captures terminal width and height (rows and columns) and sets up the scrolling area.
 // Flags can include TERM_HIDECURSOR, to start with cursor hidden, TERM_RAWKEYS to disable 'canonical' mode and get raw keystrokes
-// and TERM_BOTTOMBAR to create a region at the bottom of the screen to hold an information or input bar
+// and TERMBAR_LOWER to create a region at the bottom of the screen to hold an information or input bar. Normally you will want
+// to use TERM_SAVE_ATTRIBS so that TerminalReset can reset a terminal to it's previously state (without TERM_SAVE_ATTRIBS any
+// changes TerminalInit makes to terminal settings will persist
+// TerminalSetup (below) does the same things and more, but with a nicer interface
 int TerminalInit(STREAM *S, int Flags);
 
-// Initalize stream to be a terminal using 'Config' 
+// Initalize stream to be a terminal using 'Config', which is a list of key-value pairs
+//values:
+//    rawkeys         -- 'rawkeys' (non-canonical) mode. return keystrokes instantly rather than waiting for enter
+//    mouse           -- enable xterm mouse support
+//    wheelmouse      -- enable xterm mousewheel events
+//    save            -- save terminal config/attributes so it can be returned to previous state by TerminalReset
+//    saveattribs     -- save terminal config/attributes so it can be returned to previous state by TerminalReset
+//    width=<cols>    -- FORCE terminal width to <cols> colums, overriding autodetect
+//    height=<rows>   -- FORCE terminal height to <rows> rows, overriding autodetect
+//    forecolor=color -- set terminal foreground color
+//    fgcolor=color   -- set terminal foreground color
+//    fcolor=color    -- set terminal foreground color
+//    backcolor=color -- set terminal background color
+//    bgcolor=color   -- set terminal background color
+//    bcolor=color    -- set terminal background color
+//    focus           -- enable xterm focus-in/focus-out events
+//    hidetext        -- when asking for passwords, hide text
+//    stars           -- when asking for passwords, star-out text
+//    textstars       -- when asking for passwords, star-out text, except most recent character
+// e.g.  TerminalSetup(Term, "rawkeys wheelmouse save focus forecolor=~w backcolor=~b");
 void TerminalSetup(STREAM *S, const char *Config);
 
 
 //reset terminal values to what they were before 'TerminalInit'. You should call this before exit if you don't want a messed up console.
+//for this to work you must have called TerminalInit with 'TERM_SAVE_ATTRIBS' or TerminalSetup with 'save' or 'saveattribs'
 void TerminalReset(STREAM *S);
 
 //clear screen
@@ -272,13 +306,22 @@ const char *TerminalFormatSubStr(const char *Str, char **RetStr, STREAM *Term);
 void TerminalPutStr(const char *Str, STREAM *S);
 
 
+//'FmtStr' is a printf-style format string with '%d, %s' style substitutions and 'tilde commands' in it. 
+//Furthermore, any strings printed with '%s' can contain tilde commands too.
+//The ANSI coded result is output to stream S
+void TerminalPrint(STREAM *S, const char *FmtStr, ...);
 
 //step past a single character. Understands tilde-strings and (some) unicode, consuming them as one character
 int TerminalConsumeCharacter(const char **ptr);
 
 //calculate length of string *after ANSI formating*, so ANSI escape sequences don't count as characters added
-//to the length 
+//to the length and unicode escape sequences should only count as single chars
 int TerminalStrLen(const char *Str);
+
+// pad terminal string with a character to a length *handling ANSI formatting*, 
+// so ANSI escape sequences don't count if they just change colors, and unicode
+// escape sequences should only count as single chars
+char *TerminalPadStr(char *Str, int PadChar, int PadTo);
 
 //truncate a terminal string to a length *handling ANSI formatting*, so ANSI escape sequences don't count to 
 //the length to be truncated. This means if you ask for 5 characters, you get five text characters, plus any 

@@ -21,6 +21,15 @@ extern "C" {
 //Destroy an allocated object. Will not crash if passed NULL. 
 void Destroy(void *Obj);
 
+//reverse bytes within a uint32, There doesn't seem to be a POSIX function for this,
+//hence this one.
+uint32_t reverse_uint32(uint32_t Input);
+
+//take a string of up to 8 '1' and '0' characters and convert them to an integer value
+uint8_t parse_bcd_byte(const char *In);
+
+char *encode_bcd_bytes(char *RetStr, unsigned const char *Bytes, int Len);
+
 //fill 'size' bytes pointed to by 'Str' with char 'fill'. 'Str' is treated as a volatile, which is intended to prevent
 //the compiler from optimizing this function out. Use this function to blank memory holding sensitive information, as
 //the compiler might decide that blanking memory before freeing it serves no purpose and will this optimize the
@@ -52,9 +61,14 @@ const char *traverse_quoted(const char *ptr);
 char *CommaList(char *RetStr, const char *AddStr);
 
 
-#define SHELLSAFE_BLANK 1
+#define SHELLSAFE_BLANK  1
+#define SHELLSAFE_REPORT 2
+#define SHELLSAFE_ABORT  4
 
-char *MakeShellSafeString(char *RetStr, const char *String, int SafeLevel);
+// quote or blank out characters that are used to run unintended shell commands.
+// if 'Flags' includes 'SHELLSAFE_BLANK' then such characters are replaced with ' ', otherwise they are quoted with '\'
+// if 'Flags' includes 'SHELLSAFE_REPORT' then a syslog message is sent if any unsafe chars are found in the string
+char *MakeShellSafeString(char *RetStr, const char *String, int Flags);
 
 //remap one fd to another. e.g. change stdin, stdout or stderr to point to a different fd
 int fd_remap(int fd, int newfd);

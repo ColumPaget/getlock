@@ -90,14 +90,28 @@ char *strmrep(char *str, char *oldchars, char newchar)
 int CompareStr(const char *S1, const char *S2)
 {
     if (
-        ((!S1) || (*S1=='\0')) &&
-        ((!S2) || (*S2=='\0'))
+        (! StrValid(S1)) &&
+        (! StrValid(S2))
     ) return(0);
 
-    if ((!S1) || (*S1=='\0')) return(-1);
-    if ((!S2) || (*S2=='\0')) return(1);
+    if (! StrValid(S1)) return(-1);
+    if (! StrValid(S2)) return(1);
 
     return(strcmp(S1,S2));
+}
+
+
+int CompareStrNoCase(const char *S1, const char *S2)
+{
+    if (
+        (! StrValid(S1)) &&
+        (! StrValid(S2))
+    ) return(0);
+
+    if (! StrValid(S1)) return(-1);
+    if (! StrValid(S2)) return(1);
+
+    return(strcasecmp(S1,S2));
 }
 
 
@@ -180,7 +194,6 @@ char *VCatStr(char *Dest, const char *Str1,  va_list args)
     size_t len=0, ilen;
     char *ptr=NULL;
     const char *sptr=NULL;
-    char *eptr;
 
 
     if (Dest !=NULL)
@@ -284,7 +297,7 @@ int StrRTruncChar(char *Str, char Term)
 char *PadStr(char*Dest, char Pad, int PadLen)
 {
     char *NewStr=NULL;
-    int i, len, abslen;
+    int i, abslen;
 
     if (PadLen==0) return(Dest);
     if (PadLen < 0) abslen=0-PadLen;
@@ -312,7 +325,6 @@ char *PadStr(char*Dest, char Pad, int PadLen)
 
 char *PadStrTo(char*Dest, char Pad, int PadLen)
 {
-    char *NewStr=NULL;
     int val, len;
 
     if (PadLen==0) return(Dest);
@@ -575,7 +587,7 @@ char *StripQuotes(char *Str)
 char *QuoteCharsInStr(char *Buffer, const char *String, const char *QuoteChars)
 {
     char *RetStr=NULL;
-    const char *sptr, *cptr;
+    const char *sptr;
     size_t olen=0;
 
     RetStr=CopyStr(Buffer,"");

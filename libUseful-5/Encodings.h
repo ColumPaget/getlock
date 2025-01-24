@@ -12,7 +12,11 @@ Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
 These functions encode and decode between different encodings.
 
 'EncodingParse' is not important to C programmers, it's used when binding to languages that have poor
-support for bit flags, and converts and encoding name to one of the #defined balues below.
+support for bit flags, and converts and encoding name to one of the #defined values below.
+
+None of these encodings do things like add headers (as in uuencode and yencode) or splitting the output
+into lines, they simply do the core encoding as one giant encoded string.
+
 
 Please note that ASCII85 and Z85 are currently ENCODE ONLY. All other encodings can be used in either
 encode or decode.
@@ -57,14 +61,22 @@ If you *KNOW* that your output of DecodeBytes is going to be null-terminated tex
 'DecodeToText' which works exactly like EncodeBytes
 */
 
-#define ENCODE_NONE 0
+#define ENCODE_NONE        0
 #define ENCODE_QUOTED_MIME 1
 #define ENCODE_QUOTED_HTTP 2
-#define ENCODE_OCTAL 8
-#define ENCODE_DECIMAL 10
-#define ENCODE_HEX  16
-#define ENCODE_HEXUPPER 17
-#define ENCODE_BASE64 64
+#define ENCODE_YENCODE     3
+#define ENCODE_OCTAL       8
+#define ENCODE_DECIMAL    10
+#define ENCODE_HEX        16
+#define ENCODE_HEXUPPER   17
+#define ENCODE_BASE32  32  //rfc4648 base 32
+#define ENCODE_CBASE32 33  //crockford base32
+#define ENCODE_HBASE32 34  //'extended hex' base32
+#define ENCODE_BASE32_HEX 34
+#define ENCODE_WBASE32 35  //'word safe' base32
+#define ENCODE_BASE32_WORDSAFE 35
+#define ENCODE_ZBASE32 36
+#define ENCODE_BASE64  64
 #define ENCODE_IBASE64 65
 #define ENCODE_PBASE64 66
 #define ENCODE_XXENC 67
@@ -82,11 +94,16 @@ If you *KNOW* that your output of DecodeBytes is going to be null-terminated tex
 #define IBASE64_CHARS "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789+/"
 #define PBASE64_CHARS "0123456789-ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 #define CRYPT_CHARS "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-#define UUENC_CHARS " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
+#define UUENC_CHARS "`!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
 #define XXENC_CHARS "+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 #define ASCII85_CHARS "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstu"
 #define Z85_CHARS "01234567899abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#."
 
+#define BASE32_CROCKFORD_CHARS "0123456789abcdefghjkmnpqrstvwxyz"
+#define BASE32_RFC4648_CHARS "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+#define BASE32_HEX_CHARS "0123456789ABCDEFGHIJKLMNOPQRSTUV"
+#define BASE32_WORDSAFE_CHARS "23456789CFGHJMPQRVWXcfghjmpqrvwx"
+#define BASE32_ZBASE32_CHARS "ybndrfg8ejkmcpqxot1uwisza345h769"
 
 
 #ifdef __cplusplus
@@ -100,6 +117,8 @@ extern "C" {
 //"dec"  Decimal Encoding
 //"16"   HexaDecimal Encoding
 //"hex"  HexaDecimal Encoding
+//"32"   base32 Encoding
+//"b32"  base32 Encoding
 //"64"   base64 Encoding
 //"b64"  base64 Encoding
 //"r64"  rfc4648 compliant alternative base64 Encoding

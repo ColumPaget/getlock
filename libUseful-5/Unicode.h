@@ -1,3 +1,8 @@
+/*
+Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
+* SPDX-License-Identifier: GPL-3.0
+*/
+
 #ifndef LIBUSEFUL_UNICODE_H
 #define LIBUSEFUL_UNICODE_H
 
@@ -8,8 +13,8 @@ extern "C" {
 #endif
 
 // set the GLOBAL unicode level.
-// this is a global value that represents the unicode abilities of an OS or device. Functions like 'UnicodeStr' and 'StrAddUnicodeChar' use this
-// information in all their operations.  
+// this is a global value that represents the unicode abilities of an OS or device. 
+// Functions like 'UnicodeStr' and 'StrAddUnicodeChar' use this information in all their operations.  
 
 // There are 3 values
 // level 0: no unicode support, unicode chars will be replaced with '?'
@@ -28,6 +33,8 @@ char *UnicodeEncodeChar(char *RetStr, int UnicodeLevel, int Code);
 
 //encode a single unicode value ('Code') to a unicode string honoring the global unicode level
 char *UnicodeStr(char *RetStr, int Code);
+
+char *BufferAddUnicodeChar(char *RetStr, unsigned int len, unsigned int uchar);
 
 //encode a single unicode value ('Code') to a unicode string honoring the global unicode level, and append that string to a character string
 char *StrAddUnicodeChar(char *RetStr, int uchar);

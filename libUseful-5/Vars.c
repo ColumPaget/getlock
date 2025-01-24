@@ -2,6 +2,7 @@
 #include "defines.h"
 #include "List.h"
 #include "Time.h"
+#include "Http.h" //for 'HTTPQuote' used in SubstituteVarsInString
 
 ListNode *SetDetailVar(ListNode *Vars, const char *Name, const char *Data, int ItemType, time_t Time)
 {
@@ -28,6 +29,17 @@ ListNode *SetVar(ListNode *Vars, const char *Name, const char *Data)
 {
     return(SetDetailVar(Vars, Name, Data,0, 0));
 }
+
+void AppendVar(ListNode *Vars, const char *VarName, const char *Value)
+{
+    char *Tempstr=NULL;
+
+    Tempstr=MCopyStr(Tempstr,GetVar(Vars, VarName),Value, " ", NULL);
+    SetVar(Vars, VarName, Tempstr);
+
+    Destroy(Tempstr);
+}
+
 
 
 ListNode *FindTypedVar(ListNode *Vars, const char *Name, int Type)
@@ -106,13 +118,37 @@ void CopyVars(ListNode *Dest, ListNode *Source)
 }
 
 
-
-char *ParseVar(char *Buff, const char **Line, ListNode *LocalVars, int Flags)
+//for a value that we are going to substitute into a string, do
+//some things to it first, then add it to our new string with substituted values
+static char *SubstituteAppendVar(char *RetStr, const char *Var, int Flags)
 {
-    char *VarName=NULL, *OutStr=NULL, *Tempstr=NULL;
-    const char *ptr, *vptr;
+    char *Value=NULL;
 
-    OutStr=Buff;
+    //these are mutally exclusive
+    if (Flags & SUBS_SHELL_SAFE) Value=MakeShellSafeString(Value, Var, 0);
+    else if (Flags & SUBS_HTTP_VARS) Value=HTTPQuote(Value, Var);
+    else Value=CopyStr(Value, Var);
+
+    if (Flags & SUBS_STRIP_VARS_WHITESPACE)
+    {
+        StripTrailingWhitespace(Value);
+        StripLeadingWhitespace(Value);
+    }
+
+    if (Flags & SUBS_QUOTE_VARS) RetStr=MCatStr(RetStr,"'",Value,"'",NULL);
+    else RetStr=CatStr(RetStr, Value);
+
+    Destroy(Value);
+    return(RetStr);
+}
+
+
+//we have found a $(name) pattern that we are going to substitute.
+static char *SubstituteParseVar(char *OutStr, const char **Line, ListNode *LocalVars, int Flags)
+{
+    char *VarName=NULL, *Tempstr=NULL;
+    const char *ptr;
+
     ptr=*Line;
 
     switch (*ptr)
@@ -120,7 +156,7 @@ char *ParseVar(char *Buff, const char **Line, ListNode *LocalVars, int Flags)
     //the var name is itself a var, dereference that first
     case '$':
         ptr++;
-        Tempstr=ParseVar(Tempstr,&ptr,LocalVars,Flags);
+        Tempstr=SubstituteParseVar(Tempstr,&ptr,LocalVars,Flags);
         break;
 
     //Vars in brackets
@@ -131,7 +167,7 @@ char *ParseVar(char *Buff, const char **Line, ListNode *LocalVars, int Flags)
             if (*ptr=='$')
             {
                 ptr++;
-                Tempstr=ParseVar(Tempstr,&ptr,LocalVars,Flags);
+                Tempstr=SubstituteParseVar(Tempstr,&ptr,LocalVars,Flags);
                 VarName=CatStr(VarName,Tempstr);
             }
             else VarName=AddCharToStr(VarName,*ptr);
@@ -147,7 +183,7 @@ char *ParseVar(char *Buff, const char **Line, ListNode *LocalVars, int Flags)
             if (*ptr=='$')
             {
                 ptr++;
-                Tempstr=ParseVar(Tempstr,&ptr,LocalVars,Flags);
+                Tempstr=SubstituteParseVar(Tempstr,&ptr,LocalVars,Flags);
                 VarName=CatStr(VarName,Tempstr);
             }
             else VarName=AddCharToStr(VarName,*ptr);
@@ -160,31 +196,11 @@ char *ParseVar(char *Buff, const char **Line, ListNode *LocalVars, int Flags)
     *Line=ptr; //very important! Otherwise the calling process will not
     //know we have consumed some of the text!
 
-    //Now lookup var/format/append to output
+
     if (! (Flags & SUBS_CASE_VARNAMES)) strlwr(VarName);
+    // append value of var to output
+    OutStr=SubstituteAppendVar(OutStr, GetVar(LocalVars, VarName), Flags);
 
-    vptr=GetVar(LocalVars,VarName);
-    if (vptr)
-    {
-
-        if (Flags & SUBS_SHELL_SAFE)
-        {
-            //naughty reuse of VarName to hold altered string
-            VarName=MakeShellSafeString(VarName, vptr, 0);
-            vptr=VarName;
-        }
-
-        if (Flags & SUBS_STRIP_VARS_WHITESPACE)
-        {
-            Tempstr=CopyStr(Tempstr,vptr);
-            StripTrailingWhitespace(Tempstr);
-            StripLeadingWhitespace(Tempstr);
-            vptr=Tempstr;
-        }
-
-        if (Flags & SUBS_QUOTE_VARS) OutStr=MCatStr(OutStr,"'",vptr,"'",NULL);
-        else OutStr=CatStr(OutStr, vptr);
-    }
 
     DestroyString(VarName);
     DestroyString(Tempstr);
@@ -261,7 +277,7 @@ char *SubstituteVarsInString(char *Buffer, const char *Fmt, ListNode *Vars, int 
         case '$':
             FmtPtr++;
             StrLenCacheAdd(ReturnStr, len);
-            ReturnStr=ParseVar(ReturnStr, &FmtPtr, Vars, Flags);
+            ReturnStr=SubstituteParseVar(ReturnStr, &FmtPtr, Vars, Flags);
             //this will likely be a short string, so don't use StrLenFromCache
             len=StrLen(ReturnStr);
             break;
@@ -400,7 +416,6 @@ int ExtractVarsFromString(const char *Data, const char *FormatStr, ListNode *Var
 
 
 
-
 int FindVarNamesInString(const char *Data, ListNode *Vars)
 {
     const char *ptr;
@@ -418,5 +433,52 @@ int FindVarNamesInString(const char *Data, ListNode *Vars)
     Destroy(Name);
 
     return(ListSize(Vars));
+}
+
+
+
+void SetNumericVar(ListNode *Vars, const char *VarName, int Value)
+{
+    char *Tempstr=NULL;
+
+    Tempstr=FormatStr(Tempstr, "%d", Value);
+    SetVar(Vars, VarName, Tempstr);
+
+    Destroy(Tempstr);
+}
+
+int AddToNumericVar(ListNode *Vars, const char *VarName, int Add)
+{
+    const char *ptr;
+    int val=0;
+
+    ptr=GetVar(Vars, VarName);
+    if (ptr) val=atoi(ptr);
+    val += Add;
+
+    SetNumericVar(Vars, VarName, val);
+
+    return(val);
+}
+
+
+ListNode *VarsFromNameValueList(const char *List, const char *PairDelim, const char *NameValueDelim)
+{
+    char *Name=NULL, *Value=NULL;
+    const char *ptr;
+    ListNode *Vars;
+
+    Vars=ListCreate();
+    ptr=GetNameValuePair(List, PairDelim, NameValueDelim, &Name, &Value);
+    while (ptr)
+    {
+        SetVar(Vars, Name, Value);
+        ptr=GetNameValuePair(ptr, PairDelim, NameValueDelim, &Name, &Value);
+    }
+
+    Destroy(Name);
+    Destroy(Value);
+
+    return(Vars);
 }
 

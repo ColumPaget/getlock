@@ -44,7 +44,7 @@ int HMACFinish(HASH *HMAC, char **HashStr)
     memcpy(HMAC->Key2+BlockSize,HMAC->Key1,len);
 
 //Hash->Type
-    result=HashBytes(HashStr,Hash->Type,HMAC->Key2,BlockSize+len,0);
+    result=HashBytes(HashStr, Hash->Type, HMAC->Key2, BlockSize+len, ENCODE_NONE);
 
     return(result);
 }
@@ -99,10 +99,13 @@ void HMACPrepare(HASH *HMAC, const char *Data, int Len)
 HASH *HMACInit(const char *Type)
 {
     HASH *Hash;
+    const char *ptr;
 
     Hash=(HASH *) calloc(1, sizeof(HASH));
-    Hash->Ctx=(void *) HashInit(Type);
-    Hash->Type=MCopyStr(Hash->Type, "hmac-", Type, NULL);
+    if (strncasecmp(Type, "hmac-", 5)==0) ptr=Type+5;
+    else ptr=Type;
+    Hash->Ctx=(void *) HashInit(ptr);
+    Hash->Type=MCopyStr(Hash->Type, "hmac-", ptr, NULL);
     Hash->Update=HMACPrepare;
     Hash->Finish=HMACFinish;
 
@@ -143,8 +146,7 @@ int HMACBytes(char **RetStr, const char *Type, const char *Key, int KeyLen, cons
         result=HMACFinish(Hash, &Tempstr);
         *RetStr=EncodeBytes(*RetStr, Tempstr, result, Encoding);
     }
-    else
-        result=HMACFinish(Hash, RetStr);
+    else result=HMACFinish(Hash, RetStr);
     HMACDestroy(Hash);
 
     return(result);

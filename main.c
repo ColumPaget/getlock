@@ -294,13 +294,18 @@ void ReadLockFile(TLockFile *LF, pid_t *OwnerPid, time_t *LockTime)
 {
     char *Tempstr=NULL;
     char *ptr;
+    int result;
 
     *LockTime=0;
     Tempstr=SetStrLen(Tempstr,40);
     lseek(LF->fd,0,SEEK_SET);
-    read(LF->fd,Tempstr,40);
+    result=read(LF->fd,Tempstr,40);
+    if (result > 0)
+    {
+    StrTrunc(Tempstr, result);
     *OwnerPid=strtol(Tempstr, &ptr, 10);
     if (StrValid(ptr)) *LockTime=DateStrToSecs("%Y%m%d%H%M%S", ptr, NULL);
+    }
 
     Destroy(Tempstr);
 }
@@ -310,23 +315,25 @@ void CommitLock(TLockFile *LF)
 {
     char *Tempstr=NULL;
     struct stat FStat;
+    int result;
 
     fstat(LF->fd, &FStat);
 
     if (LF->Flags & FLAG_NO_WRITE)
     {
-        LogEvent(LOG_DEBUG, "Not writing pid to file.");
+        LogEvent(LOG_DEBUG, "Not writing pid to file '%s'", LF->Path);
     }
     else if (FStat.st_size > MAX_PIDFILE_SIZE)
     {
-        LogEvent(LOG_ERR, "File size is greater than %d bytes, probably not a lockfile! Not writing pid to file!", MAX_PIDFILE_SIZE);
+        LogEvent(LOG_ERR, "Size of file '%s' is greater than %d bytes, probably not a lockfile! Not writing pid to file!", LF->Path, MAX_PIDFILE_SIZE);
     }
     else
     {
         Tempstr=FormatStr(Tempstr,"%d %s", getpid(), GetDateStr("%Y%m%d%H%M%S", NULL));
-        ftruncate(LF->fd,0);
+        if (ftruncate(LF->fd,0) != 0) LogEvent(LOG_ERR, "ERROR: ftruncate failed on file '%s'\n", LF->Path);
         lseek(LF->fd,0,SEEK_SET);
-        write(LF->fd,Tempstr,StrLen(Tempstr));
+        result=write(LF->fd,Tempstr,StrLen(Tempstr));
+	if (result != StrLen(Tempstr)) LogEvent(LOG_ERR, "Issue writing pid to file '%s' for program '%s", LF->Path, Settings.Program);
         LF->Flags |= FLAG_GOT_LOCK;
     }
 
@@ -481,12 +488,12 @@ int ProcessLocks(int NotifyFD)
 
     if (! GotLock)
     {
-        LogEvent(LOG_ERR, "Couldn't lock file");
+        LogEvent(LOG_ERR, "Couldn't lock all files for process '%s'", Settings.Program);
         if (StrLen(Settings.OnFail)) system(Settings.OnFail);
-        if (NotifyFD > -1) write(NotifyFD,"N\n",2);
+        if (NotifyFD > -1) result=write(NotifyFD,"N\n",2);
         if (! (Settings.Flags & FLAG_RUN_ANYWAY)) exit(RESULT_NOLOCK);
     }
-    else if (NotifyFD > -1) write(NotifyFD,"Y\n",2);
+    else if (NotifyFD > -1) result=write(NotifyFD,"Y\n",2);
 
     if (StrLen(Settings.Program)) RunProgram();
     else
@@ -500,7 +507,6 @@ int ProcessLocks(int NotifyFD)
 
     if (GotLock) DeleteFiles(Settings.LockFiles, FLAG_DELETE_FILE);
 
-
     free(Tempstr);
 
     return(GotLock);
@@ -508,7 +514,7 @@ int ProcessLocks(int NotifyFD)
 
 
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     int result, GotLock=FALSE;
     char *Tempstr=NULL;
@@ -546,7 +552,12 @@ main(int argc, char *argv[])
 //continue) then the parent can exit, the child will take it from here
     if (Settings.Flags & FLAG_BACKGROUND)
     {
-        pipe(pfds);
+        if (pipe(pfds) !=0)
+	{
+		Tempstr=CopyStr(Tempstr, strerror(errno));
+		LogEvent(LOG_ERR, "ERROR: Failed to create pipe to subprocess: %s", Tempstr);
+	}
+
         result=fork();
         if (result ==0)
         {
@@ -566,6 +577,6 @@ main(int argc, char *argv[])
     }
     else GotLock=ProcessLocks(-1);
 
-    if (GotLock) exit(RESULT_GOTLOCK);
-    exit(RESULT_NOLOCK);
+    if (GotLock) return(RESULT_GOTLOCK);
+    return(RESULT_NOLOCK);
 }

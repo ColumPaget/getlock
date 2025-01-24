@@ -538,6 +538,12 @@ static const char *ParserRSSItems(int ParserType, const char *Doc, ListNode *Par
             while (isspace(*ptr)) ptr++;
             break;
 
+
+        //we must be careful with PrevToken here. If the tag starts with '/', then it's a close tag, and PrevToken will contain all
+        //the data enclosed by the tag. But anything else is a starting tag, and in that case we don't want to carry PrevToken forwards
+        //as it will result in crap (most probably whitespace and linefeed in indented RSS XML) stuck on the front of the data.
+        //Thus we have to clear out PrevToken in each of our matches, except the '/' match
+        //unfortunately we can't just clear PrevToken out ad the end of a tag, because of the <![CDATA[ tag, where we will want to keep it
         case '<':
             InTag=TRUE;
             while (isspace(*ptr)) ptr++;
@@ -557,21 +563,10 @@ static const char *ParserRSSItems(int ParserType, const char *Doc, ListNode *Par
                     StripQuotes(Token);
                     ParserAddValue(Parent, Name, PrevToken);
                 }
+                PrevToken=CopyStr(PrevToken, ""); //we've used PrevToken, so clear it out
                 break;
 
-            case 'i':
-            case 'I':
-                if (strcasecmp(Token,"item")==0)
-                {
-                    ptr=ParserAddNewStructure(ptr, ParserType, Parent, ITEM_ENTITY, NULL, IndentLevel+1);
-                }
-                else if (strcasecmp(Token,"image")==0)
-                {
-                    ptr=ParserAddNewStructure(ptr, ParserType, Parent, ITEM_ENTITY, Token, IndentLevel+1);
-                }
-                else Name=CopyStr(Name, Token);
-                break;
-
+            //this is another case where we don't want to clear prev token out at the start of this
             case '!':
                 if (strncmp(ptr,"[CDATA[",7)==0)
                 {
@@ -584,12 +579,32 @@ static const char *ParserRSSItems(int ParserType, const char *Doc, ListNode *Par
                 PrevToken=CopyStr(PrevToken, "");
                 break;
 
+            case 'e':
+            case 'E':
+                PrevToken=CopyStr(PrevToken,"");
+                /*someone's always got to be different. 'enclosure' breaks the structure of RSS */
+                if (strcasecmp(Token,"enclosure")==0) ptr=ParserRSSEnclosure(Parent, ptr);
+                break;
+
+            case 'i':
+            case 'I':
+                PrevToken=CopyStr(PrevToken,"");
+                if (strcasecmp(Token,"item")==0)
+                {
+                    ptr=ParserAddNewStructure(ptr, ParserType, Parent, ITEM_ENTITY, NULL, IndentLevel+1);
+                }
+                else if (strcasecmp(Token,"image")==0)
+                {
+                    ptr=ParserAddNewStructure(ptr, ParserType, Parent, ITEM_ENTITY, Token, IndentLevel+1);
+                }
+                else Name=CopyStr(Name, Token);
+                break;
+
+
             default:
                 PrevToken=CopyStr(PrevToken,"");
                 if (strcasecmp(Token,"channel")==0) /*ignore */ ;
                 else if (strcasecmp(Token,"rss")==0) /*ignore */ ;
-                /*someone's always got to be different. 'enclosure' breaks the structure of RSS */
-                else if (strcasecmp(Token,"enclosure")==0) ptr=ParserRSSEnclosure(Parent, ptr);
                 else Name=CopyStr(Name, Token);
                 break;
             }
@@ -732,6 +747,7 @@ static const char *ParserCMONItems(int ParserType, const char *Doc, ListNode *Pa
         {
         case '#':
             ptr=GetToken(ptr,"\n",&Token,0);
+            Token=CopyStr(Token,"");
             break;
 
         case ':':
@@ -793,6 +809,80 @@ static const char *ParserCMONItems(int ParserType, const char *Doc, ListNode *Pa
 
 
 
+#define INI_TOKENS " |	|#|=|;|[|]|\r|\n"
+
+static const char *ParserINIItems(int ParserType, const char *Doc, ListNode *Parent, int IndentLevel)
+{
+    const char *ptr, *p_prev;
+    char *Token=NULL, *PrevToken=NULL;
+    int BreakOut=FALSE;
+
+
+    ptr=Doc;
+    while (ptr && (! BreakOut))
+    {
+        //while (isspace(*ptr)) ptr++;
+        p_prev=ptr;
+        ptr=GetToken(ptr, INI_TOKENS, &Token, GETTOKEN_MULTI_SEP|GETTOKEN_INCLUDE_SEP|GETTOKEN_HONOR_QUOTES);
+
+        switch (*Token)
+        {
+        case '#':
+        case ';':
+            ptr=GetToken(ptr,"\n",&Token,0);
+            Token=CopyStr(Token,"");
+            break;
+
+        case '[':
+            if (IndentLevel > 0)
+            {
+                Destroy(PrevToken);
+                Destroy(Token);
+                return(p_prev);
+            }
+
+            if (! StrValid(PrevToken))
+            {
+                ptr=GetToken(ptr,"]",&Token,0);
+                ptr=ParserAddNewStructure(ptr, ParserType, Parent, ITEM_ENTITY, Token, IndentLevel+1);
+                //we don't want token to be used as a 'PrevToken', because we've already consumed it
+                Token=CopyStr(Token,"");
+            }
+            else
+            {
+                PrevToken=CatStr(PrevToken, Token);
+                ptr=GetToken(ptr,"=",&Token,0);
+                PrevToken=CatStr(PrevToken, Token);
+            }
+            break;
+
+        case '=':
+            ptr=GetToken(ptr, "\n", &Token, GETTOKEN_QUOTES);
+            StripLeadingWhitespace(Token);
+            StripTrailingWhitespace(Token);
+            StripQuotes(PrevToken);
+            StripQuotes(Token);
+            ParserAddValue(Parent, PrevToken, Token);
+            break;
+
+        case ' ':
+        case '	':
+        case '\r':
+            break;
+
+        default:
+            PrevToken=CopyStr(PrevToken, Token);
+            StripTrailingWhitespace(PrevToken);
+            StripLeadingWhitespace(PrevToken);
+            break;
+        }
+    }
+
+    DestroyString(PrevToken);
+    DestroyString(Token);
+    return(ptr);
+}
+
 
 
 
@@ -823,6 +913,7 @@ static const char *ParserURLItems(int ParserType, const char *Doc, ListNode *Par
 
 const char *ParserParseItems(int Type, const char *Doc, ListNode *Parent, int IndentLevel)
 {
+
     switch (Type)
     {
     case PARSER_XML:
@@ -846,7 +937,9 @@ const char *ParserParseItems(int Type, const char *Doc, ListNode *Parent, int In
     case PARSER_CMON:
         return(ParserCMONItems(Type, Doc, Parent, IndentLevel));
         break;
-
+    case PARSER_INI:
+        return(ParserINIItems(Type, Doc, Parent, IndentLevel));
+        break;
     }
     return(NULL);
 }
@@ -859,6 +952,12 @@ ListNode *ParserParseDocument(const char *TypeStr, const char *Doc)
     ListNode *Items;
     int Type;
 
+    if (! StrValid(Doc))
+    {
+        RaiseError(0, "ParserParseDocument", "Empty Document Supplied");
+        return(NULL);
+    }
+
     Type=ParserIdentifyDocType(TypeStr);
     if (Type==-1)
     {
@@ -869,8 +968,12 @@ ListNode *ParserParseDocument(const char *TypeStr, const char *Doc)
     Items=ListCreate();
     ptr=Doc;
     while (isspace(*ptr)) ptr++;
-    if (*ptr=='{') ptr++;
-    if (*ptr=='[') ptr++;
+
+    if (Type == PARSER_JSON)
+    {
+        if (*ptr=='{') ptr++;
+        if (*ptr=='[') ptr++;
+    }
     ParserParseItems(Type, ptr, Items, 0);
 
     fflush(NULL);
@@ -887,7 +990,7 @@ ListNode *ParserFindItem(ListNode *Items, const char *Name)
     char *Token=NULL;
     const char *ptr;
 
-
+    if (! Items) return(NULL);
     ptr=Name;
     if (*ptr=='/')
     {
@@ -1066,7 +1169,6 @@ char *ParserExportYAML(char *RetStr, int Type, int Indent, ListNode *Item)
 char *ParserExportCMON(char *RetStr, int Type, int Indent, ListNode *Item)
 {
     char *Token=NULL;
-    const char *ptr;
 
     if (Indent > 0) RetStr=PadStr(RetStr, ' ', Indent);
     switch (Item->ItemType)

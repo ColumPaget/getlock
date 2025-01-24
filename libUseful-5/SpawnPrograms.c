@@ -7,8 +7,9 @@
 #include "String.h"
 #include "Errors.h"
 #include "FileSystem.h"
+#include "Container.h"
 #include <sys/ioctl.h>
-#include <wait.h>
+#include <sys/wait.h>
 
 #define SPAWN_COMBINE_STDERR 1
 #define SPAWN_STDOUT_NULL 2
@@ -43,7 +44,7 @@ int SpawnParseConfig(const char *Config)
 //This is the function we call in the child process for 'SpawnCommand'
 int BASIC_FUNC_EXEC_COMMAND(void *Command, int Flags)
 {
-    int result;
+    int result=-1;
     char *Token=NULL, *FinalCommand=NULL, *ExecPath=NULL;
     char **argv;
     const char *ptr;
@@ -76,7 +77,7 @@ int BASIC_FUNC_EXEC_COMMAND(void *Command, int Flags)
             argv[i]=CopyStr(argv[i],Token);
         }
 
-        execv(ExecPath, argv);
+        result=execv(ExecPath, argv);
     }
     else result=execl("/bin/sh","/bin/sh","-c",(char *) Command,NULL);
 
@@ -116,7 +117,6 @@ pid_t xfork(const char *Config)
 pid_t xforkio(int StdIn, int StdOut, int StdErr)
 {
     pid_t pid;
-    int fd;
 
     pid=xfork("");
     if (pid==0)
@@ -181,6 +181,30 @@ pid_t SpawnWithIO(const char *CommandLine, const char *Config, int StdIn, int St
 }
 
 
+//This creates an STDIO pipe, unless 'ToNull' is true
+static int PipeSpawnCreateStdOutPipe(const char *Type, int channel[2], int ToNull)
+{
+    int fd=-1, result;
+
+    channel[0]=-1;
+    channel[1]=-1;
+
+//if we ask for this to be set to null, then we map leave fd set to -1
+//which maps to /dev/null in xforkio
+    if (! ToNull)
+    {
+        result=pipe(channel);
+        if (result==0)
+        {
+            if (strcmp(Type, "stdin")==0) fd=channel[0];
+            else fd=channel[1];
+        }
+        else RaiseError(ERRFLAG_ERRNO, "PipeSpawnFunction", "Failed to create pipe for %s", Type);
+    }
+
+    return(fd);
+}
+
 
 /* This creates a child process that we can talk to using a couple of pipes*/
 pid_t PipeSpawnFunction(int *infd, int *outfd, int *errfd, BASIC_FUNC Func, void *Data, const char *Config)
@@ -188,65 +212,27 @@ pid_t PipeSpawnFunction(int *infd, int *outfd, int *errfd, BASIC_FUNC Func, void
     pid_t pid;
     //default these to stdin, stdout and stderr and then override those later
     int c1=0, c2=1, c3=2;
-    int channel1[2], channel2[2], channel3[2], DevNull=-1;
-    int result;
+    int channel1[2], channel2[2], channel3[2];
     int Flags=0;
 
-
     Flags=SpawnParseConfig(Config);
-    if (infd)
-    {
-        result=pipe(channel1);
-        //this is a read channel, so pipe[0]
-        if (result==0) c1=channel1[0];
-        else RaiseError(ERRFLAG_ERRNO, "PipeSpawnFunction", "Failed to create pipe for stdin");
-    }
+    if (infd) c1=PipeSpawnCreateStdOutPipe("stdin", channel1, 0);
+    if (outfd) c2=PipeSpawnCreateStdOutPipe("stdout", channel2, Flags & SPAWN_STDOUT_NULL);
 
-    if (outfd)
-    {
-        result=pipe(channel2);
-        //this is a write channel, so pipe[1]
-        if (result==0) c2=channel2[1];
-        else RaiseError(ERRFLAG_ERRNO, "PipeSpawnFunction", "Failed to create pipe for stdout");
-    }
-
-    if (errfd)
-    {
-        result=pipe(channel3);
-        //this is a write channel, so pipe[1]
-        if (result==0) c3=channel3[1];
-        else RaiseError(ERRFLAG_ERRNO, "PipeSpawnFunction", "Failed to create pipe for stderr");
-    }
+    if (errfd) c3=PipeSpawnCreateStdOutPipe("stderr", channel3, Flags & SPAWN_STDERR_NULL);
     else if (Flags & SPAWN_COMBINE_STDERR) c3=c2;
-
 
     pid=xforkio(c1, c2, c3);
     if (pid==0)
     {
-        /* we are the child */
+        /* we are the child, so we close the appropriate sites of the pipe for our connection */
         if (infd) close(channel1[1]);
-        else if (DevNull==-1) DevNull=open("/dev/null",O_RDWR);
-
-        if (Flags & SPAWN_STDOUT_NULL)
-        {
-            if (outfd) close(*outfd);
-            outfd=NULL;
-        }
-
         if (outfd) close(channel2[0]);
-        else if (DevNull==-1) DevNull=open("/dev/null",O_RDWR);
-
-        if (Flags & SPAWN_STDERR_NULL)
-        {
-            if (errfd) close(*errfd);
-            errfd=NULL;
-        }
-
         if (errfd) close(channel3[0]);
-        else if (DevNull==-1) DevNull=open("/dev/null",O_RDWR);
 
         //if Func is NULL we effectively do a fork, rather than calling a function we just
         //continue exectution from where we were
+
         Flags=ProcessApplyConfig(Config);
         if (Func)
         {
@@ -261,12 +247,15 @@ pid_t PipeSpawnFunction(int *infd, int *outfd, int *errfd, BASIC_FUNC Func, void
         {
             close(channel1[0]);
             *infd=channel1[1];
+            if (*infd == -1) *infd=open("/dev/null", O_RDWR);
         }
         if (outfd)
         {
             close(channel2[1]);
             *outfd=channel2[0];
+            if (*outfd == -1) *outfd=open("/dev/null", O_RDWR);
         }
+
         if (errfd)
         {
             close(channel3[1]);
@@ -292,23 +281,25 @@ pid_t PipeSpawn(int *infd,int  *outfd,int  *errfd, const char *Command, const ch
 pid_t PseudoTTYSpawnFunction(int *ret_pty, BASIC_FUNC Func, void *Data, int Flags, const char *Config)
 {
     pid_t pid=-1, ConfigFlags=0;
-    int tty, pty, i;
+    int tty, pty;
 
     if (PseudoTTYGrab(&pty, &tty, Flags))
     {
+        //ContainerApplyConfig(Config);
         pid=xforkio(tty, tty, tty);
         if (pid==0)
         {
             close(pty);
 
-            ProcessSetControlTTY(tty);
+            ConfigFlags=ProcessApplyConfig(Config);
+
             setsid();
+            ProcessSetControlTTY(tty);
 
             ///now that we've dupped it, we don't need to keep it open
             //as it will be open on stdin/stdout
             close(tty);
 
-            ConfigFlags=ProcessApplyConfig(Config);
 
             //if Func is NULL we effectively do a fork, rather than calling a function we just
             //continue exectution from where we were
@@ -359,18 +350,15 @@ STREAM *STREAMSpawnFunction(BASIC_FUNC Func, void *Data, const char *Config)
     if (pid > 0)
     {
         S=STREAMFromDualFD(from_fd, to_fd);
-        /*
-        if (waitpid(pid, NULL, WNOHANG) < 1)
-        //sleep to allow spawned function time to exit due to startup problems
-        usleep(250);
-        //use waitpid to check process has not exited, if so then spawn stream
-        else fprintf(stderr, "ERROR: Subprocess exited: %s %s\n", strerror(errno), Data);
-        */
     }
 
     if (S)
     {
-        STREAMSetFlushType(S,FLUSH_LINE,0,0);
+        //if we are doing to be sending raw data to the process, then flush always
+        //otherwise we expect lines of text and flush on a line terminator
+        if (Flags & TTYFLAG_DATA) STREAMSetFlushType(S,FLUSH_ALWAYS,0,0);
+        else STREAMSetFlushType(S,FLUSH_LINE,0,0);
+
         Tempstr=FormatStr(Tempstr,"%d",pid);
         STREAMSetValue(S,"PeerPID",Tempstr);
         S->Type=STREAM_TYPE_PIPE;
@@ -424,6 +412,7 @@ int STREAMSpawnCommandAndPty(const char *Command, const char *Config, STREAM **C
 
     if (PseudoTTYGrab(&pty, &tty, TTYFLAG_PTY))
     {
+        //ContainerApplyConfig(Config);
         //handle situation where Config might be null
         if (StrValid(Config)) Tempstr=CopyStr(Tempstr, Config);
         else Tempstr=CopyStr(Tempstr, "rw");

@@ -5,7 +5,7 @@ Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
 
 /*
  *
- * You probably have no interest in this module, it provides shared functionality used by TerminalMenu and TerminalChoice
+ * You probably have no interest in this module, it provides shared functionality used by TerminalMenu, TerminalChoice and TerminalProgress
  */
 
 
@@ -41,6 +41,9 @@ TERMWIDGET *TerminalWidgetNew(STREAM *Term, int x, int y, int width, int high,  
 TERMWIDGET *TerminalWidgetCreate(STREAM *Term, const char *Options);
 void TerminalWidgetParseConfig(TERMWIDGET *TW, const char *Config);
 void TerminalWidgetDestroy(void *p_Widget);
+
+int TerminalWidgetPutLine(TERMWIDGET *TW, int line, const char *Text);
+int TerminalWidgetStartLine(TERMWIDGET *TW, int line);
 
 
 #ifdef __cplusplus

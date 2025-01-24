@@ -574,16 +574,22 @@ int TerminalTranslateKeyStrWithMod(const char *str, int *mod)
             if (mod !=NULL) *mod |= KEYMOD_ALT;
             str+=4;
         }
-        else if ((strncasecmp(str, "lalt-", 4)==0) || (strncasecmp(str, "lalt_", 4)==0))
+        else if ((strncasecmp(str, "lalt-", 5)==0) || (strncasecmp(str, "lalt_", 5)==0))
         {
             if (mod !=NULL) *mod |= KEYMOD_ALT;
             str+=5;
         }
-        else if ((strncasecmp(str, "ralt-", 4)==0) || (strncasecmp(str, "ralt_", 4)==0))
+        else if ((strncasecmp(str, "ralt-", 5)==0) || (strncasecmp(str, "ralt_", 5)==0))
         {
             if (mod !=NULL) *mod |= KEYMOD_ALT2;
             str+=5;
         }
+        else if ((strncasecmp(str, "super-", 6)==0) || (strncasecmp(str, "super_", 6)==0))
+        {
+            if (mod !=NULL) *mod |= KEYMOD_SUPER;
+            str+=6;
+        }
+
         else break;
     }
 
@@ -1449,7 +1455,7 @@ static int TerminalReadCSISeqNum(STREAM *S, char PrevChar)
 static int TerminalReadCSIMouse(STREAM *S)
 {
     char *Tempstr=NULL;
-    int flags, x, y, val, keycode=0;
+    int flags, x, y, keycode=0;
 
     flags=STREAMReadChar(S)-32;
     x=STREAMReadChar(S)-32;

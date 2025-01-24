@@ -42,6 +42,12 @@ time_t DateStrToSecs(const char *DateFormat, const char *Str, const char *TimeZo
 //Convert a string describing a duration to seconds. String in the form "1d 5h 30m" where m=minutes h=hours d=days w=weeks y=year Y=year (year always 365 days)
 time_t ParseDuration(const char *Dur);
 
+//format a string using the substitutions %w %d %h %m %s for weeks, days, hours, minutes and seconds
+//if any of the substututions are missing, then their value is carried over to the next highest substitution
+//so if there's no '%d', then the 'days' part will be counted in '%h' (hours) 
+//or if that is missing in '%m' (mins) or '%s' (seconds) 
+const char *FormatDuration(const char *Fmt, time_t Duration);
+
 //convert Time from timezone 'SrcZone' to 'DstZone'
 char *TimeZoneConvert(char *RetStr, const char *Time, const char *SrcZone, const char *DstZone);
 
@@ -55,6 +61,18 @@ long TimezoneOffset(const char *TimeZone);
 
 //convert a milliseconds value to a timeval
 void MillisecsToTV(int millisecs, struct timeval *tv);
+
+//return TRUE (1) if year is a leap year, FALSE (0) otherwise
+int IsLeapYear(unsigned int year);
+
+//return number of days in month (month range 1-12, months < 1 are in previous years and >12 are in subsequent years)
+int GetDaysInMonth(int Month, int Year);
+
+//produce a csv of days in month. each line is a week. Any dates starting
+//with '-' are in the previous month to the one requested, and any 
+//started with '+' are in the next month
+char *CalendarFormatCSV(char *RetStr, unsigned int Month, unsigned int Year);
+
 
 #ifdef __cplusplus
 }

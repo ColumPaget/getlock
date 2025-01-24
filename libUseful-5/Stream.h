@@ -22,10 +22,11 @@ The first argument can be any of the following types:
 file:///tmp/myfile.txt                   file, web-browser style. Note 3 '/' symbols. 
 mmap:/tmp/myfile.txt                     memory mapped file
 tty:/dev/ttyS0:38400                     open a serial device, in this case at 38400 baud
-udp:192.168.2.1:53                       udp network connection
+udp:192.168.2.1:53                       udp socket (Use STREAMSendDgram, from Socket.h to send packets)
 tcp:192.168.2.1:25                       tcp network connection
 ssl:192.168.2.1:443                      tcp network connection with encryption
 tls:192.168.2.1:443                      tcp network connection with encryption
+bcast:255.255.255.255:5353               udp broadcast socket (Use STREAMSendDgram, from Socket.h to send packets)
 ws:nos.lol/                              websocket
 wss:nos.lol/                             secure websocket
 unix:/tmp/socket                         unix socket
@@ -74,11 +75,32 @@ L     lock/unlock file on each write
 i     allow this file to be inherited across an exec (default is close-on-exec)
 t     make a unique temporary file name. the file path must be a mktemp style template, with the last six characters being 'XXXXXX'
 S     file contents are sorted
-x     treat file path as a command to execute (currently on in ssh: streams) 
+x     exclusive open using O_EXCL. Only create/open file if it doesn't exist.
 z     compress/uncompress with gzip
+e     encrypt using openssl compatible file format
+R     autorecovery. Take a backup when the file is opened for write, and if the file isn't closed properly, then revert to that backup when next it's opened.
 
 
-for tcp/unix/udp network connections the 'config argument' is normally 'rw' followed by name-value pairs with the following values
+for encrypted files with the 'e' option, a password must be supplied using the 'encrypt' argument. The key and inputvector are calculated from this password.
+e.g.
+
+S=STREAMOpen("myfile.enc", "we encrypt=T0PSekrit");
+
+The default cipher used is aes-256-cbc, however the cipher can be overridden like so:
+
+
+S=STREAMOpen("myfile.enc", "we encrypt=T0PSekrit encrypt_cipher=blowfish");
+
+Encryption only supports either read only or write only files, not read-write.
+
+
+
+Autorecovery using the 'R' option will take a backup whenever the file is opened write-only, but not for read-write or append. This backup should be deleted when the file is closed. If the file is opened for read or append, and the backup exists, then the file will be moved to <path>.<date>.error and the backup will be imported in it's place.
+
+
+
+for tcp/unix/udp network connections the 'config argument' defaults to 'rw' if blank. 
+Otherwise it is made up of the following options
 
 r  - 'read' mode (a non-op as all sockets are readable)
 w  - 'write' mode (a non-op as all sockets are writeable)
@@ -90,13 +112,34 @@ F  - TCP Fastopen
 R  - Don't route (equivalent to applying SOCKOPT_DONTROUTE)
 N  - TCP no-delay (disable Nagle algo)
 
-Name-value pairs are:
+This argument can be followed by name-value pairs such as:
 
 ttl=<seconds>       set ttl of socket
 tos=<value>         set tos of socket
 mark=<value>        set SOCKOPT_MARK if supported
 keepalive=<y/n>     turn on/off socket keepalives
 timeout=<centisecs> connect/read timeout for socket
+
+
+UDP sockets might not work quite as you'd expect: The socket binds to a random port at the local end, and expects to send to the supplied port, rather the same way tcp works. If you want to bind a UDP socket to a specific local port, and receive and send messages from that port from/to other hosts, then you need to use STREAMServerNew from Server.h
+
+
+For SSH streams config argument is a string of characters each of which represents an option 
+that modifies stream behavior, as with 'fopen'. By default SSH streams are treated as a 
+stream to a file, much like http, but if the 'x' flag is used, the file name is instead
+treated as a command to be run, with the contents of the stream being the output from and
+input to that command.
+
+c     create file
+r     read only
+w     write only
+a     append 
++     make read-only, append or write-only be read-write
+E     raise an error if this file fails to open
+i     allow this file to be inherited across an exec (default is close-on-exec)
+S     file contents are sorted
+x     treat file path as a command to execute (currently on in ssh: streams) 
+z     compress/uncompress with gzip
 
 
 for 'http', 'https', 'ws' and 'wss' URLs the first argument is a character list (though only one character long) with the following values
@@ -108,16 +151,16 @@ D    DELETE method
 P    PATCH method
 H    HEAD  method
 
-after this initial argument come name-value pairs with the following values
 
+method=<method>  //override method (GET/POST etc) with any default value
 oauth=<oauth config to use>
-content-type=<content type>
-content-length=<content length>
+content-type=<content type>         //content type of sent data (for PUT/POST)
+content-length=<content length>     //content length of sent data (for PUT/POST)
 user=<username>
 useragent=<user agent>
 user-agent=<user agent>
-timeout=<centisecs>
-hostauth
+timeout=<centisecs>    //socket timeout in centisecs, this applies both to connection timeout and read timeout. If a different value is desired for read, set it with 'STREAMSetTimeout'
+hostauth   //send auth details without waiting for 401 from server
 
 Note, 'hostauth' is not a name/value pair, just a config flag that enables sending authentication without waiting for a 401 Response from the server. This means that we can't know the authentication realm for the server, and so internally use the hostname as the realm for looking up logon credentials. This is mostly useful for the github api.
 
@@ -136,8 +179,10 @@ For 'tty' type URLs the config options are those detailed in "Pty.h" for "TTYCon
 
 
 //the 'Type' variable in the STREAM object is set to one of thse values and is used internally for knowing how to handle a given stream
-typedef enum {STREAM_TYPE_FILE, STREAM_TYPE_PIPE, STREAM_TYPE_TTY, STREAM_TYPE_UNIX, STREAM_TYPE_UNIX_DGRAM, STREAM_TYPE_TCP, STREAM_TYPE_UDP, STREAM_TYPE_SSL, STREAM_TYPE_HTTP, STREAM_TYPE_CHUNKED_HTTP, STREAM_TYPE_MESSAGEBUS, STREAM_TYPE_UNIX_SERVER, STREAM_TYPE_TCP_SERVER, STREAM_TYPE_UNIX_ACCEPT, STREAM_TYPE_TCP_ACCEPT, STREAM_TYPE_TPROXY, STREAM_TYPE_UPROXY, STREAM_TYPE_SSH, STREAM_TYPE_WS, STREAM_TYPE_WSS } ESTREAMType;
+typedef enum {STREAM_TYPE_FILE, STREAM_TYPE_PIPE, STREAM_TYPE_TTY, STREAM_TYPE_UNIX, STREAM_TYPE_UNIX_DGRAM, STREAM_TYPE_TCP, STREAM_TYPE_UDP, STREAM_TYPE_SSL, STREAM_TYPE_HTTP, STREAM_TYPE_CHUNKED_HTTP, STREAM_TYPE_MESSAGEBUS, STREAM_TYPE_UNIX_SERVER, STREAM_TYPE_TCP_SERVER, STREAM_TYPE_UNIX_ACCEPT, STREAM_TYPE_TCP_ACCEPT, STREAM_TYPE_TPROXY, STREAM_TYPE_UPROXY, STREAM_TYPE_SSH, STREAM_TYPE_WS, STREAM_TYPE_WSS, STREAM_TYPE_HTTP_SERVER, STREAM_TYPE_HTTP_ACCEPT, STREAM_TYPE_WS_SERVER, STREAM_TYPE_WS_ACCEPT, STREAM_TYPE_WS_SERVICE} ESTREAMType;
 
+
+#define STREAM_TYPE_TLS STREAM_TYPE_SSL
 
 
 #include <fcntl.h>
@@ -178,43 +223,48 @@ typedef enum {STREAM_TYPE_FILE, STREAM_TYPE_PIPE, STREAM_TYPE_TTY, STREAM_TYPE_U
 #define SF_WRONLY 32       //open stream write only
 #define SF_CREAT 64        //create stream if it doesn't exist
 #define SF_CREATE 64       //create stream if it doesn't exist
-#define STREAM_APPEND 128      //append to file
+#define STREAM_APPEND 128  //append to file
 #define SF_TRUNC 256       //truncate file to zero bytes on open
 #define SF_MMAP  512       //create a memory mapped file
 #define SF_WRLOCK 1024     //lock file on every write
 #define SF_RDLOCK 2048     //lock file on every read
-#define SF_FOLLOW 4096     //follow symbolic links
-#define SF_SECURE 8192     //lock internal buffers into memory so they aren't written to swap or coredumps
-#define SF_NONBLOCK 16384  //nonblocking open (you must use select to check that the file is ready to use)
-#define SF_TLS_AUTO 32768  //nothing to see here, move along
-#define SF_ERROR 65536     //raise an error if open or connect fails
-#define SF_EXEC_INHERIT 131072  //allow file to be inherited across an exec (default is close-on-exec)
-#define SF_BINARY       262144  //'binary mode' for websocket etc
-#define SF_NOCACHE 524288       //don't cache file data in filesystem cache
-#define SF_SORTED  1048576      //file is sorted, this is a hint to 'STREAMFind'
-#define STREAM_IMMUTABLE  2097152   //file is immutable (if supported by fs)
+#define SF_FOLLOW 4096     //ONLY FOR FILES: follow symbolic links
+#define SF_TLS    4096     //ONLY FOR SOCKETS: use SSL/TLS
+#define SF_SECURE             8192  //lock internal buffers into memory so they aren't written to swap or coredumps
+#define SF_NONBLOCK          16384  //nonblocking open (you must use select to check that the file is ready to use)
+#define SF_EXCL              32768  //ONLY FOR FILES: exclusive create with O_EXCL, file must not pre-exist
+#define SF_TLS_AUTO          32768  //nothing to see here, move along
+#define SF_ERROR             65536  //raise an error if open or connect fails
+#define SF_EXEC_INHERIT     131072  //allow stream to be inherited across an exec (default is close-on-exec)
+#define SF_AUTORECOVER      262144  //ONLY FOR FILES: take autorecovery backup on writing a file, and apply it on read
+#define SF_BINARY           262144  //ONLY FOR SOCKETS: 'binary mode' for, websockets etc
+#define SF_NOCACHE          524288  //don't cache file data in filesystem cache
+#define SF_LIST             524288  //only for SSH streams: list files
+#define SF_SORTED          1048576  //file is sorted, this is a hint to 'STREAMFind'
+#define STREAM_IMMUTABLE   2097152  //file is immutable (if supported by fs)
 #define STREAM_APPENDONLY  4194304  //file is append-only (if supported by fs)
-#define SF_COMPRESSED  8388608  //enable compression, this requests compression
-#define SF_TMPNAME  16777216    //file path is a template to create a temporary file name (must end in 'XXXXXX')
+#define SF_COMPRESSED      8388608  //enable compression, this requests compression
+#define SF_TMPNAME        16777216  //file path is a template to create a temporary file name (must end in 'XXXXXX')
+#define SF_ENCRYPT        33554432  //file path is a template to create a temporary file name (must end in 'XXXXXX')
 
 
 //Stream state values, set in S->State
-#define SS_CONNECTING 1
-#define SS_INITIAL_CONNECT_DONE 4
-#define SS_CONNECTED 8
-#define SS_DATA_ERROR 16
-#define SS_WRITE_ERROR 32
-#define SS_EMBARGOED 64
-#define SS_SSL  4096
-#define SS_AUTH 8192
-#define SS_COMPRESSED 16384 //compression enabled, specifies compression active on a stream
-#define SS_MSG_READ 32768
+#define LU_SS_CONNECTING 1
+#define LU_SS_INITIAL_CONNECT_DONE 4
+#define LU_SS_CONNECTED 8
+#define LU_SS_DATA_ERROR 16
+#define LU_SS_WRITE_ERROR 32
+#define LU_SS_EMBARGOED 64
+#define LU_SS_SSL  4096
+#define LU_SS_AUTH 8192
+#define LU_SS_COMPRESSED 16384 //compression enabled, specifies compression active on a stream
+#define LU_SS_MSG_READ 32768
 
 //state values available for programmer use
-#define SS_USER1 268435456
-#define SS_USER2 536870912
-#define SS_USER3 1073741824
-#define SS_USER4 2147483648
+#define LU_SS_USER1 268435456
+#define LU_SS_USER2 536870912
+#define LU_SS_USER3 1073741824
+#define LU_SS_USER4 2147483648
 
 
 
