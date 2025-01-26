@@ -24,6 +24,7 @@
 #define FLAG_INTERVAL_FILE 8192
 #define FLAG_RESTART 16384
 #define FLAG_SYSLOG  32768
+#define FLAG_NOSU    65536
 
 #define RESULT_GOTLOCK 0
 #define RESULT_BADARGS 1
@@ -60,7 +61,8 @@ typedef struct
 
 TSettings Settings;
 
-char *Version="3.0";
+char *Version="4.0";
+
 
 void OpenSysLog()
 {
@@ -69,6 +71,7 @@ void OpenSysLog()
         openlog(NULL, LOG_NDELAY | LOG_PID, LOG_DAEMON);
     }
 }
+
 
 void LogEvent(int Level, const char *Fmt, ...)
 {
@@ -105,6 +108,32 @@ void SigHandler(int sig)
 
 
 
+//this is supplied independantly of the version in libUseful
+//incase the libuseful getlock is compiled against doesn't have this
+int GetlockNoNewPrivs()
+{
+#ifdef HAVE_PRCTL
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#ifdef PR_SET_NO_NEW_PRIVS
+
+//set, then check that the set worked. This correctly handles situations where we ask to set more than once
+//as the second attempt may 'fail', but we already have the desired result
+    prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+    if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) == 1) return(TRUE);
+
+    LogEvent(LOG_ERR, "Failed to set 'no new privs': '%s'. It may still be possible for process to go superuser", strerror(errno));
+#else
+    LogEvent(LOG_WARNING, "This platform doesn't seem to support the 'no new privs' option. It may still be possible for process to go superuser");
+#endif
+#else
+    LogEvent(LOG_WARNING, "This platform doesn't seem to support the 'no new privs' option. It may still be possible for process to go superuser");
+#endif
+#endif
+
+return(FALSE);
+}
+
 
 
 void PrintUsage()
@@ -139,6 +168,9 @@ void PrintUsage()
     printf("%-8s %s\n","-g <n>","Gracetime, wait <n> secs before doing kills");
     printf("%-8s %s\n","-k","Send SIGTERM to lockfile owner");
     printf("%-8s %s\n","-K","Send SIGKILL (kill -9) to lockfile owner");
+    printf("%-8s %s\n","-P","'no new privs' do not allow process escalate privilege");
+    printf("%-8s %s\n","-nosu","'no new privs' do not allow process escalate privilege");
+    printf("%-8s %s\n","-nopriv","'no new privs' do not allow process escalate privilege");
     printf("%-8s %s\n","-U <user>","Run as user");
     printf("%-8s %s\n","-user <user>","Run as user");
     printf("%-8s %s\n","-G <group>","Run as group");
@@ -246,6 +278,9 @@ void ParseArgs(int argc, char *argv[])
         else if (strcmp(argv[i],"-K")==0) Settings.Flags |= FLAG_KILL_OWNER;
         else if (strcmp(argv[i],"-L")==0) Settings.Flags |= FLAG_SYSLOG;
         else if (strcmp(argv[i],"-syslog")==0) Settings.Flags |= FLAG_SYSLOG;
+        else if (strcmp(argv[i],"-nosu")==0) Settings.Flags |= FLAG_NOSU;
+        else if (strcmp(argv[i],"-nopriv")==0) Settings.Flags |= FLAG_NOSU;
+        else if (strcmp(argv[i],"-P")==0) Settings.Flags |= FLAG_NOSU;
         else if (strcmp(argv[i],"-F")==0) Settings.OnFail=CopyStr(Settings.OnFail,argv[++i]);
         else if (strcmp(argv[i],"-U")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
         else if (strcmp(argv[i],"-user")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
@@ -375,7 +410,7 @@ int DoLock(TLockFile *LF, int *OwnerPid)
         }
         else CommitLock(LF);
     }
-    else LogEvent(LOG_DEBUG, "FILE: %s is locked by PID: %d",LF->Path,*OwnerPid);
+    else LogEvent(LOG_INFO, "FILE: %s is locked by PID: %d",LF->Path,*OwnerPid);
 
 
     DestroyString(Tempstr);
@@ -526,6 +561,7 @@ int main(int argc, char *argv[])
     if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
     if (StrLen(Settings.User)) SwitchUser(Settings.User);
 
+		if (Settings.Flags & FLAG_NOSU) GetlockNoNewPrivs();
 
     if (! ListSize(Settings.LockFiles))
     {

@@ -6,6 +6,7 @@ FLAGS=$(CFLAGS) @DEFS@
 INSTALL=@INSTALL@
 prefix=@prefix@
 bindir=$(prefix)@bindir@
+mandir=$(prefix)@mandir@
 
 all: @LIBUSEFUL_BUNDLED@
 	$(CC) $(FLAGS) -g -ogetlock main.c $(LIBS) @LIBUSEFUL_BUNDLED@
@@ -17,7 +18,10 @@ clean:
 	@rm -f getlock libUseful-5/*.o libUseful-5/*.a libUseful-5/*.so
 
 install:
+	mkdir -p $(bindir)
 	$(INSTALL) getlock $(bindir)
+	mkdir -p $(mandir)
+	$(INSTALL) getlock.1 $(mandir)
 
 test:
 	-echo "no tests"

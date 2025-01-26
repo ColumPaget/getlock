@@ -1,0 +1,21 @@
+v4.0 (2025-01-26)
+-----------------
+	* add -nopriv/-nosu/-P flag to prevent priviledge elevation on linux
+  * better debug/warning messages/logs
+  * added CHANGELOG
+  * added manpage
+
+v3.0 (2023-07-26)
+----------------
+  * add -R, -q -L -syslog options
+
+v2.0 (2022-03-26)
+-----------------
+  * final changes to run interval feature
+  * added -i option
+
+v1.0 (2019-02-12)
+  * moved configure.in to configure.ac, as the latter is apparently the correct naming convention
+  * rationalized command-line args. Bumped version to 1.0, as surely there's nothing more to be added to this after the '-C' option
+  * added -C (Close on Exec) option
+  * added -user and -group options

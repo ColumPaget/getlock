@@ -53,7 +53,6 @@ COMMAND
 ```
 	getlock [options] LockFilePath [LockFilePath] ... Program
 
-
 -a <seconds> Abandon running task, killall subprocesses and exit after <seconds>
 -b       Fork into background when got lock
 -d       delete lockfile when done
@@ -76,6 +75,9 @@ COMMAND
 -g <n>   Gracetime, wait <n> secs before doing kills
 -k       Send SIGTERM to lockfile owner
 -K       Send SIGKILL (kill -9) to lockfile owner
+-P       'no new privs' do not allow process escalate privilege
+-nosu    'no new privs' do not allow process escalate privilege
+-nopriv  'no new privs' do not allow process escalate privilege
 -U <user> Run as user
 -user <user> Run as user
 -G <group> Run as group
@@ -87,6 +89,53 @@ COMMAND
 -h       this help
 -help    this help
 --help   this help
+
+  The flags -d -s -i -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.
+
+  -k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than 25 bytes, as they are too big to only contain a Process ID
+
+  -i specifies an interval of time between runs. It uses the timestamp stored in lockfiles. It will not run until that timestamp, plus the interval, specifies a time that's in the past. It is a positional lock-file modifier, like -d. Thus it specifies lockfiles that will be used to store a timestamp, and which will be deleted if the run command fails (returns an exit status other than 0). In this way if the command fails, it can be immedialtely tried again. If it succeeds it will not run again until the interval expires.
+
+  -C is used in situations where you want to allow child processes to be launched without holding a lock. Normally, when running a program or script, one wants to hold a lock file until not only the program has exited, but also any child programs that it starts. However, if using a script to launch long-running processes it may not be desirable to hold onto the lock. The -C option sets all lockfiles to be 'Close on Exec', so that only the getlock process is holding those files locked, and when it exits the locks will be released, even if child processes are still running in the background.
+
+  -R restarts the launched program if it exits. This implies getlock will run forever unless the getlock process itself is terminated. The '-q' option allows specifying a 'dwell time' in milliseconds between restarts. Beware of setting this to zero, as a program that fails to startup will be launched over and over, fast as possible, burning up CPU resources.
+
+RETURN VALUE: 0 on lock, 1 if bad args on the command line, 3 if failed to get lock. Works with bash-style 'if'
+
+EXAMPLES:
+getlock /tmp/file1.lck /var/lock/file2.lck "echo Got locks!"
+	Lock /tmp/file1.lck and /var/lock/file2.lck, then run 'echo'
+
+getlock -k -w -g 5 /tmp/file1.lck "echo Got locks!"
+	Lock /tmp/file1.lck, killing any current owner if made to wait more than 5 secs
+
+getlock file1.lck -k file2.lck -d file3.lck "echo Got locks!"
+	Lock 3 files, killing the current owners of 'file2.lck' and 'file3.lck' and deleting 'file3.lck' when done
+
+getlock -w file1.lck "echo Got locks!"
+	wait till we get a lock on file1.lck (without -w will exit if cannot lock on first try)
+
+getlock -w file1.lck -s /home/colum/MyWork.txt "vi /home/colum/MyWork.txt"
+	wait till we get a lock on file1.lck and /home/colum/MyWork.txt, but DO NOT WRITE A PID INTO /home/colum/MyWork.txt
+
+getlock -N -k file1.lck file2.lck
+	Don't run a program, just kill owners of file1.lck and file2.lck
+
+getlock -N -w -b file1.lck
+	Don't run any program, just wait till we get a lock on file1.lck, then fork into background and hold the lock. Useful in shell scripts. e.g:
+		if getlock -b -N -w /tmp/file1.lck
+		then
+			echo "got lock"
+			DoStuff
+			kill `cat /tmp/file1.lck`
+		else
+		echo "FAILED TO GET LOCK"
+		fi
+
+getlock -N -w -t 10 -b file1.lck
+	As above, but only wait ten secs for lock, and only hold lock for ten secs.
+
+
 ```
 
 
@@ -132,6 +181,12 @@ PROGRAM RESTART
 ===============
 
 The `-R` option restarts a program if it exits. This implies that a getlock launched with this configuration will run forever, unless the getlock process itself is terminated. The '-q' option allows specifying a number of milliseconds 'dwell time' before launching the process again. The default dwell time is 100 milliseconds. Beware of setting this to '0', as a program that fails to run will attempt restart over and over again, burning up CPU resources.
+
+
+"NO NEW PRIVS"
+==============
+
+The `-nosu` `-nopriv` and `-P` options are equivalent and all set a flag in the os kernel that prevents any attempt to escalate privildges. This is only supported on linux. If getlock is run with these options then no use of 'su' 'sudo' or raising privildges via setuid will work.
 
 
 RETURN VALUE 
