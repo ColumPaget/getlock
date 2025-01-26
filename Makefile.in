@@ -1,7 +1,7 @@
-CC = @CC@
-VERSION = @VERSION@
-CFLAGS = @CFLAGS@
-LIBS = @LIBS@
+CC=@CC@
+VERSION=@VERSION@
+CFLAGS=@CFLAGS@
+LIBS=@LIBS@
 FLAGS=$(CFLAGS) @DEFS@
 INSTALL=@INSTALL@
 prefix=@prefix@
@@ -9,13 +9,15 @@ bindir=$(prefix)@bindir@
 mandir=$(prefix)@mandir@
 
 all: @LIBUSEFUL_BUNDLED@
-	$(CC) $(FLAGS) -g -ogetlock main.c $(LIBS) @LIBUSEFUL_BUNDLED@
+	$(CC) $(FLAGS) -g -ogetlock main.c @LIBUSEFUL_BUNDLED@ $(LIBS) 
 
 libUseful-5/libUseful.a:
 	$(MAKE) -C libUseful-5
 
 clean:
-	@rm -f getlock libUseful-5/*.o libUseful-5/*.a libUseful-5/*.so
+	@rm -f getlock libUseful-5/*.o libUseful-5/*.a libUseful-5/*.so libUseful-5/*.so.*
+
+
 
 install:
 	mkdir -p $(bindir)
