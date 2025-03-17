@@ -1,6 +1,13 @@
+v4.1 (2025-03-17)
+-----------------
+  * replace exit() with _exit() in signal handler (suggested by elfring@github.com) 
+  * error checking on lseek in ReadLockFile (suggested by elfring@github.com) 
+  * switch to 'libUseful-bundled' directory name to prevent confusion between bundled and installed libUseful 
+
+
 v4.0 (2025-01-26)
 -----------------
-	* add -nopriv/-nosu/-P flag to prevent priviledge elevation on linux
+  * add -nopriv/-nosu/-P flag to prevent priviledge elevation on linux
   * better debug/warning messages/logs
   * added CHANGELOG
   * added manpage

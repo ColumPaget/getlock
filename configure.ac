@@ -17,6 +17,12 @@ AC_ARG_ENABLE(zlib, [  --enable-zlib     only needed if statically linked libuse
 AC_CHECK_FUNCS(prctl)
 AC_CHECK_HEADERS([sys/prctl.h])
 
+AC_CHECK_LIB([c],quick_exit,[cf_have_quick_exit=yes],[cf_have_quick_exit=no])
+if test "$cf_have_quick_exit" = "yes"
+then
+AC_DEFINE([HAVE_QUICK_EXIT])
+fi
+
 if test "$cf_system_libuseful" != "no"
 then
 	AC_CHECK_LIB([Useful-5],GetToken,[cf_have_libUseful5=yes],[cf_have_libUseful5=no])
@@ -54,19 +60,40 @@ then
   cf_use_ssl="yes"
 else
   AC_DEFINE(HAVE_LIBUSEFUL5)
-  AC_SUBST(LIBUSEFUL_BUNDLED,"libUseful-5/libUseful.a")
-  AC_CONFIG_SUBDIRS([libUseful-5])
+  AC_SUBST(LIBUSEFUL_BUNDLED,"libUseful-bundled/libUseful.a")
+  AC_CONFIG_SUBDIRS([libUseful-bundled])
 fi
 
 if test "$cf_use_ssl" = "yes"
 then
-	dnl openssl isn't really needed, but if it exists and we're using a system-wide libUseful, then that will
-	dnl likely be linked against it
-	AC_CHECK_LIB(ssl,SSL_library_init,,)
-  AC_CHECK_LIB(ssl,OPENSSL_init_ssl,,)
-	AC_CHECK_LIB(crypto,EVP_CIPHER_CTX_init,,)
+        dnl openssl isn't really needed, but if it exists and we're using a system-wide libUseful, then that will
+        dnl likely be linked against it
+
+        AC_CHECK_LIB(crypto,EVP_CIPHER_CTX_init,,)
+        cf_have_libcrypto=$ac_cv_lib_crypto_EVP_CIPHER_CTX_init
+        
+        dnl New versions of openssl seem to lack EVP_CIPHER_CTX_init, so let's look for another function. I've no idea what's going on with openssl, this is why I use libressl instead.
+        if test "$cf_have_libcrypto" != "yes"
+        then
+                AC_CHECK_LIB(crypto,EVP_CIPHER_CTX_new,,)
+                cf_have_libcrypto=$ac_cv_lib_crypto_EVP_CIPHER_CTX_new
+        fi
+        
+        
+        AC_CHECK_LIB(ssl,SSL_library_init,,)
+        cf_have_libssl=$ac_cv_lib_ssl_SSL_library_init
+        
+        dnl New versions of openssl seem to lack SSL_library_init, so let's look for another function. I've no idea what's going on with openssl, this is why I use libressl instead.
+        if test "$cf_have_libssl" != "yes"
+        then
+                AC_CHECK_LIB(ssl,OPENSSL_init_ssl,,)
+                cf_have_libssl=$ac_cv_lib_ssl_OPENSSL_init_ssl
+        fi
+        
 	cf_use_zlib="yes"
 fi
+
+
 
 if test "$cf_use_zlib" = "yes"
 then

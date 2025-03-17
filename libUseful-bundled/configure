@@ -613,7 +613,6 @@ PACKAGE_STRING=''
 PACKAGE_BUGREPORT=''
 PACKAGE_URL=''
 
-ac_unique_file="main.c"
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stddef.h>
@@ -646,16 +645,13 @@ ac_includes_default="\
 #endif"
 
 ac_header_c_list=
-enable_option_checking=no
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
-subdirs
-LIBUSEFUL_BUNDLED
+SIMD_CFLAGS
+CPP
+SONAME_FLAGS
 EGREP
 GREP
-INSTALL_DATA
-INSTALL_SCRIPT
-INSTALL_PROGRAM
 SET_MAKE
 OBJEXT
 EXEEXT
@@ -664,6 +660,8 @@ CPPFLAGS
 LDFLAGS
 CFLAGS
 CC
+LN
+AR
 target_alias
 host_alias
 build_alias
@@ -707,9 +705,22 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 enable_largefile
-with_libuseful
+enable_wall
+enable_werror
+enable_fortify
+enable_stack_protect
+enable_harden
+enable_soname
+enable_sendfile
+enable_ip6
+enable_xattr
+enable_fsflags
+enable_namespaces
 enable_ssl
 enable_zlib
+enable_simd
+enable_capabilities
+enable_seccomp
 '
       ac_precious_vars='build_alias
 host_alias
@@ -718,8 +729,9 @@ CC
 CFLAGS
 LDFLAGS
 LIBS
-CPPFLAGS'
-ac_subdirs_all='libUseful-bundled'
+CPPFLAGS
+CPP'
+
 
 # Initialize some variables set by options.
 ac_init_help=
@@ -1336,13 +1348,22 @@ Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --disable-largefile     omit support for large files
-  --enable-ssl 	only needed if statically linked libuseful is linked against openssl
-  --enable-zlib     only needed if statically linked libuseful is linked against zlib
-
-Optional Packages:
-  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
-  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-libuseful		use system-wide libUseful (default=auto)
+  --enable-wall               use -Wall to get maximum compile warnings
+  --enable-werror             treat compile warnings as errors
+  --enable-fortify            use 'FORTIFY_SOURCE=3' to harden source code
+  --enable-stack-protect      use '-fstack-protector-strong' to harden source code
+  --enable-harden             use 'FORTIFY_SOURCE=3' and stack-protect to harden source code
+  --enable-soname             use 'soname' in shared lib. Defaults to 'yes' for gcc 'no' otherwise
+  --enable-sendfile           enable 'fastcopy' sendfile support
+  --enable-ip6                enable IPv6 support
+  --enable-xattr              enable filesystem xattr support
+  --enable-fsflags              enable support for immutable and append-only files (and use of these in logs)
+  --enable-namespaces         enable linux namespace support
+  --enable-ssl                use Secure Sockets Layer
+  --enable-zlib               use ZLib Compression
+  --enable-simd=<level>       use SIMD cpu extensions, 'level' can be one of mmx, sse, sse2
+  --enable-capabilities       enable linux capabilities support (default=no)
+  --enable-seccomp           enable seccomp to limit process syscalls
 
 Some influential environment variables:
   CC          C compiler command
@@ -1352,6 +1373,7 @@ Some influential environment variables:
   LIBS        libraries to pass to the linker, e.g. -l<library>
   CPPFLAGS    (Objective) C/C++ preprocessor flags, e.g. -I<include dir> if
               you have headers in a nonstandard directory <include dir>
+  CPP         C preprocessor
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -1614,6 +1636,96 @@ printf "%s\n" "$ac_res" >&6; }
   eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
 
 } # ac_fn_c_check_header_compile
+
+# ac_fn_check_decl LINENO SYMBOL VAR INCLUDES EXTRA-OPTIONS FLAG-VAR
+# ------------------------------------------------------------------
+# Tests whether SYMBOL is declared in INCLUDES, setting cache variable VAR
+# accordingly. Pass EXTRA-OPTIONS to the compiler, using FLAG-VAR.
+ac_fn_check_decl ()
+{
+  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
+  as_decl_name=`echo $2|sed 's/ *(.*//'`
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether $as_decl_name is declared" >&5
+printf %s "checking whether $as_decl_name is declared... " >&6; }
+if eval test \${$3+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  as_decl_use=`echo $2|sed -e 's/(/((/' -e 's/)/) 0&/' -e 's/,/) 0& (/g'`
+  eval ac_save_FLAGS=\$$6
+  as_fn_append $6 " $5"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+$4
+int
+main (void)
+{
+#ifndef $as_decl_name
+#ifdef __cplusplus
+  (void) $as_decl_use;
+#else
+  (void) $as_decl_name;
+#endif
+#endif
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  eval "$3=yes"
+else $as_nop
+  eval "$3=no"
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+  eval $6=\$ac_save_FLAGS
+
+fi
+eval ac_res=\$$3
+	       { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+printf "%s\n" "$ac_res" >&6; }
+  eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
+
+} # ac_fn_check_decl
+
+# ac_fn_c_try_cpp LINENO
+# ----------------------
+# Try to preprocess conftest.$ac_ext, and return whether this succeeded.
+ac_fn_c_try_cpp ()
+{
+  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
+  if { { ac_try="$ac_cpp conftest.$ac_ext"
+case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
+printf "%s\n" "$ac_try_echo"; } >&5
+  (eval "$ac_cpp conftest.$ac_ext") 2>conftest.err
+  ac_status=$?
+  if test -s conftest.err; then
+    grep -v '^ *+' conftest.err >conftest.er1
+    cat conftest.er1 >&5
+    mv -f conftest.er1 conftest.err
+  fi
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; } > conftest.i && {
+	 test -z "$ac_c_preproc_warn_flag$ac_c_werror_flag" ||
+	 test ! -s conftest.err
+       }
+then :
+  ac_retval=0
+else $as_nop
+  printf "%s\n" "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+    ac_retval=1
+fi
+  eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
+  as_fn_set_status $ac_retval
+
+} # ac_fn_c_try_cpp
 ac_configure_args_raw=
 for ac_arg
 do
@@ -2226,104 +2338,6 @@ as_fn_append ac_header_c_list " strings.h strings_h HAVE_STRINGS_H"
 as_fn_append ac_header_c_list " sys/stat.h sys_stat_h HAVE_SYS_STAT_H"
 as_fn_append ac_header_c_list " sys/types.h sys_types_h HAVE_SYS_TYPES_H"
 as_fn_append ac_header_c_list " unistd.h unistd_h HAVE_UNISTD_H"
-
-# Auxiliary files required by this configure script.
-ac_aux_files="install-sh"
-
-# Locations in which to look for auxiliary files.
-ac_aux_dir_candidates="${srcdir}${PATH_SEPARATOR}${srcdir}/..${PATH_SEPARATOR}${srcdir}/../.."
-
-# Search for a directory containing all of the required auxiliary files,
-# $ac_aux_files, from the $PATH-style list $ac_aux_dir_candidates.
-# If we don't find one directory that contains all the files we need,
-# we report the set of missing files from the *first* directory in
-# $ac_aux_dir_candidates and give up.
-ac_missing_aux_files=""
-ac_first_candidate=:
-printf "%s\n" "$as_me:${as_lineno-$LINENO}: looking for aux files: $ac_aux_files" >&5
-as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-as_found=false
-for as_dir in $ac_aux_dir_candidates
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-  as_found=:
-
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}:  trying $as_dir" >&5
-  ac_aux_dir_found=yes
-  ac_install_sh=
-  for ac_aux in $ac_aux_files
-  do
-    # As a special case, if "install-sh" is required, that requirement
-    # can be satisfied by any of "install-sh", "install.sh", or "shtool",
-    # and $ac_install_sh is set appropriately for whichever one is found.
-    if test x"$ac_aux" = x"install-sh"
-    then
-      if test -f "${as_dir}install-sh"; then
-        printf "%s\n" "$as_me:${as_lineno-$LINENO}:   ${as_dir}install-sh found" >&5
-        ac_install_sh="${as_dir}install-sh -c"
-      elif test -f "${as_dir}install.sh"; then
-        printf "%s\n" "$as_me:${as_lineno-$LINENO}:   ${as_dir}install.sh found" >&5
-        ac_install_sh="${as_dir}install.sh -c"
-      elif test -f "${as_dir}shtool"; then
-        printf "%s\n" "$as_me:${as_lineno-$LINENO}:   ${as_dir}shtool found" >&5
-        ac_install_sh="${as_dir}shtool install -c"
-      else
-        ac_aux_dir_found=no
-        if $ac_first_candidate; then
-          ac_missing_aux_files="${ac_missing_aux_files} install-sh"
-        else
-          break
-        fi
-      fi
-    else
-      if test -f "${as_dir}${ac_aux}"; then
-        printf "%s\n" "$as_me:${as_lineno-$LINENO}:   ${as_dir}${ac_aux} found" >&5
-      else
-        ac_aux_dir_found=no
-        if $ac_first_candidate; then
-          ac_missing_aux_files="${ac_missing_aux_files} ${ac_aux}"
-        else
-          break
-        fi
-      fi
-    fi
-  done
-  if test "$ac_aux_dir_found" = yes; then
-    ac_aux_dir="$as_dir"
-    break
-  fi
-  ac_first_candidate=false
-
-  as_found=false
-done
-IFS=$as_save_IFS
-if $as_found
-then :
-
-else $as_nop
-  as_fn_error $? "cannot find required auxiliary files:$ac_missing_aux_files" "$LINENO" 5
-fi
-
-
-# These three variables are undocumented and unsupported,
-# and are intended to be withdrawn in a future Autoconf release.
-# They can cause serious problems if a builder's source tree is in a directory
-# whose full name contains unusual characters.
-if test -f "${ac_aux_dir}config.guess"; then
-  ac_config_guess="$SHELL ${ac_aux_dir}config.guess"
-fi
-if test -f "${ac_aux_dir}config.sub"; then
-  ac_config_sub="$SHELL ${ac_aux_dir}config.sub"
-fi
-if test -f "$ac_aux_dir/configure"; then
-  ac_configure="$SHELL ${ac_aux_dir}configure"
-fi
-
 # Check that the precious variables saved in the cache have kept the same
 # value.
 ac_cache_corrupted=false
@@ -2395,6 +2409,20 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
+if test "$AR" = ""
+then
+AR=ar
+fi
+
+
+
+if test "$LN" = ""
+then
+LN=ln
+fi
+
+
+echo "CC=$CC AR=$AR LN=$LN"
 
 
 
@@ -3429,106 +3457,6 @@ printf "%s\n" "no" >&6; }
   SET_MAKE="MAKE=${MAKE-make}"
 fi
 
-
-
-  # Find a good install program.  We prefer a C program (faster),
-# so one script is as good as another.  But avoid the broken or
-# incompatible versions:
-# SysV /etc/install, /usr/sbin/install
-# SunOS /usr/etc/install
-# IRIX /sbin/install
-# AIX /bin/install
-# AmigaOS /C/install, which installs bootblocks on floppy discs
-# AIX 4 /usr/bin/installbsd, which doesn't work without a -g flag
-# AFS /usr/afsws/bin/install, which mishandles nonexistent args
-# SVR4 /usr/ucb/install, which tries to use the nonexistent group "staff"
-# OS/2's system install, which has a completely different semantic
-# ./install, which can be erroneously created by make from ./install.sh.
-# Reject install programs that cannot install multiple files.
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for a BSD-compatible install" >&5
-printf %s "checking for a BSD-compatible install... " >&6; }
-if test -z "$INSTALL"; then
-if test ${ac_cv_path_install+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    # Account for fact that we put trailing slashes in our PATH walk.
-case $as_dir in #((
-  ./ | /[cC]/* | \
-  /etc/* | /usr/sbin/* | /usr/etc/* | /sbin/* | /usr/afsws/bin/* | \
-  ?:[\\/]os2[\\/]install[\\/]* | ?:[\\/]OS2[\\/]INSTALL[\\/]* | \
-  /usr/ucb/* ) ;;
-  *)
-    # OSF1 and SCO ODT 3.0 have their own names for install.
-    # Don't use installbsd from OSF since it installs stuff as root
-    # by default.
-    for ac_prog in ginstall scoinst install; do
-      for ac_exec_ext in '' $ac_executable_extensions; do
-	if as_fn_executable_p "$as_dir$ac_prog$ac_exec_ext"; then
-	  if test $ac_prog = install &&
-	    grep dspmsg "$as_dir$ac_prog$ac_exec_ext" >/dev/null 2>&1; then
-	    # AIX install.  It has an incompatible calling convention.
-	    :
-	  elif test $ac_prog = install &&
-	    grep pwplus "$as_dir$ac_prog$ac_exec_ext" >/dev/null 2>&1; then
-	    # program-specific install script used by HP pwplus--don't use.
-	    :
-	  else
-	    rm -rf conftest.one conftest.two conftest.dir
-	    echo one > conftest.one
-	    echo two > conftest.two
-	    mkdir conftest.dir
-	    if "$as_dir$ac_prog$ac_exec_ext" -c conftest.one conftest.two "`pwd`/conftest.dir/" &&
-	      test -s conftest.one && test -s conftest.two &&
-	      test -s conftest.dir/conftest.one &&
-	      test -s conftest.dir/conftest.two
-	    then
-	      ac_cv_path_install="$as_dir$ac_prog$ac_exec_ext -c"
-	      break 3
-	    fi
-	  fi
-	fi
-      done
-    done
-    ;;
-esac
-
-  done
-IFS=$as_save_IFS
-
-rm -rf conftest.one conftest.two conftest.dir
-
-fi
-  if test ${ac_cv_path_install+y}; then
-    INSTALL=$ac_cv_path_install
-  else
-    # As a last resort, use the slow shell script.  Don't cache a
-    # value for INSTALL within a source directory, because that will
-    # break other packages using the cache if that directory is
-    # removed, or if the value is a relative name.
-    INSTALL=$ac_install_sh
-  fi
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $INSTALL" >&5
-printf "%s\n" "$INSTALL" >&6; }
-
-# Use test -z because SunOS4 sh mishandles braces in ${var-val}.
-# It thinks the first close brace ends the variable substitution.
-test -z "$INSTALL_PROGRAM" && INSTALL_PROGRAM='${INSTALL}'
-
-test -z "$INSTALL_SCRIPT" && INSTALL_SCRIPT='${INSTALL}'
-
-test -z "$INSTALL_DATA" && INSTALL_DATA='${INSTALL} -m 644'
-
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for grep that handles long lines and -e" >&5
 printf %s "checking for grep that handles long lines and -e... " >&6; }
 if test ${ac_cv_path_GREP+y}
@@ -3669,7 +3597,6 @@ fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_path_EGREP" >&5
 printf "%s\n" "$ac_cv_path_EGREP" >&6; }
  EGREP="$ac_cv_path_EGREP"
-
 
 
 
@@ -3879,29 +3806,263 @@ fi
 
 
 
-# Check whether --with-libuseful was given.
-if test ${with_libuseful+y}
-then :
-  withval=$with_libuseful; cf_system_libuseful=$withval
-fi
+cf_have_libssl=no
+cf_have_libcrypto=no
+cf_have_libz=no
 
-# Check whether --enable-ssl was given.
-if test ${enable_ssl+y}
+cf_use_simd=no
+cf_use_sendfile=no
+cf_use_xattr=no
+
+cf_use_hashopenssl=auto
+
+
+
+
+# Check whether --enable-wall was given.
+if test ${enable_wall+y}
 then :
-  enableval=$enable_ssl; cf_use_ssl=$enableval
+  enableval=$enable_wall; cf_use_wall=$enableval
 else $as_nop
-  cf_use_ssl="no"
+  cf_use_wall=no
 fi
 
-# Check whether --enable-zlib was given.
-if test ${enable_zlib+y}
+if test "$cf_use_wall" = "yes"
+then
+CFLAGS="$CFLAGS -Wall"
+fi
+
+
+# Check whether --enable-werror was given.
+if test ${enable_werror+y}
 then :
-  enableval=$enable_zlib; cf_use_zlib=$enableval
+  enableval=$enable_werror; cf_use_werror=$enableval
 else $as_nop
-  cf_use_zlib="no"
+  cf_use_werror=no
+fi
+
+if test "$cf_use_werror" = "yes"
+then
+CFLAGS="$CFLAGS -Werror"
 fi
 
 
+# Check whether --enable-fortify was given.
+if test ${enable_fortify+y}
+then :
+  enableval=$enable_fortify; cf_use_fortify=$enableval
+else $as_nop
+  cf_use_fortify=no
+fi
+
+# Check whether --enable-stack-protect was given.
+if test ${enable_stack_protect+y}
+then :
+  enableval=$enable_stack_protect; cf_use_stackprotect=$enableval
+else $as_nop
+  cf_use_stackprotect=no
+fi
+
+# Check whether --enable-harden was given.
+if test ${enable_harden+y}
+then :
+  enableval=$enable_harden; cf_use_harden=$enableval
+else $as_nop
+  cf_use_harden=no
+fi
+
+# Check whether --enable-soname was given.
+if test ${enable_soname+y}
+then :
+  enableval=$enable_soname; cf_use_soname=$enableval
+else $as_nop
+  cf_use_soname=gcc
+fi
+
+
+SONAME_FLAGS=""
+
+if test "$cf_use_soname" != "no"
+then
+  if test "$GCC" = "yes"
+  then
+        SONAME_FLAGS='-Wl,${LINKER_SONAME_OPTION},${SONAME}'
+
+  else
+      if test "$cf_use_soname" = "yes"
+      then
+				SONAME_FLAGS='-Wl,${LINKER_SONAME_OPTION},${SONAME}'
+
+      fi
+  fi
+fi
+
+
+if test "$cf_use_harden" = "yes"
+then
+cf_use_fortify="yes"
+cf_use_stackprotect="yes"
+fi
+
+
+if test "$cf_use_fortify" = "yes"
+then
+CFLAGS="$CFLAGS -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3"
+fi
+
+if test "$cf_use_stackprotect" = "yes"
+then
+CFLAGS="$CFLAGS -fstack-protector-strong"
+fi
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for get_current_dir_name in -lc" >&5
+printf %s "checking for get_current_dir_name in -lc... " >&6; }
+if test ${ac_cv_lib_c_get_current_dir_name+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lc  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char get_current_dir_name ();
+int
+main (void)
+{
+return get_current_dir_name ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_c_get_current_dir_name=yes
+else $as_nop
+  ac_cv_lib_c_get_current_dir_name=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_get_current_dir_name" >&5
+printf "%s\n" "$ac_cv_lib_c_get_current_dir_name" >&6; }
+if test "x$ac_cv_lib_c_get_current_dir_name" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBC 1" >>confdefs.h
+
+  LIBS="-lc $LIBS"
+
+fi
+
+cf_have_get_current_dir_name=$ac_cv_lib_c_get_current_dir_name
+if test "$cf_have_get_current_dir_name" = "yes"
+then
+printf "%s\n" "#define HAVE_GET_CURR_DIR 1" >>confdefs.h
+
+fi
+
+
+ac_fn_c_check_func "$LINENO" "ptsname_r" "ac_cv_func_ptsname_r"
+if test "x$ac_cv_func_ptsname_r" = xyes
+then :
+  printf "%s\n" "#define HAVE_PTSNAME_R 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "clearenv" "ac_cv_func_clearenv"
+if test "x$ac_cv_func_clearenv" = xyes
+then :
+  printf "%s\n" "#define HAVE_CLEARENV 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "setresuid" "ac_cv_func_setresuid"
+if test "x$ac_cv_func_setresuid" = xyes
+then :
+  printf "%s\n" "#define HAVE_SETRESUID 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "initgroups" "ac_cv_func_initgroups"
+if test "x$ac_cv_func_initgroups" = xyes
+then :
+  printf "%s\n" "#define HAVE_INITGROUPS 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "poll" "ac_cv_func_poll"
+if test "x$ac_cv_func_poll" = xyes
+then :
+  printf "%s\n" "#define HAVE_POLL 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "mlock" "ac_cv_func_mlock"
+if test "x$ac_cv_func_mlock" = xyes
+then :
+  printf "%s\n" "#define HAVE_MLOCK 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "mlockall" "ac_cv_func_mlockall"
+if test "x$ac_cv_func_mlockall" = xyes
+then :
+  printf "%s\n" "#define HAVE_MLOCKALL 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "munlockall" "ac_cv_func_munlockall"
+if test "x$ac_cv_func_munlockall" = xyes
+then :
+  printf "%s\n" "#define HAVE_MUNLOCKALL 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "madvise" "ac_cv_func_madvise"
+if test "x$ac_cv_func_madvise" = xyes
+then :
+  printf "%s\n" "#define HAVE_MADVISE 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "htonll" "ac_cv_func_htonll"
+if test "x$ac_cv_func_htonll" = xyes
+then :
+  printf "%s\n" "#define HAVE_HTONLL 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "ntohll" "ac_cv_func_ntohll"
+if test "x$ac_cv_func_ntohll" = xyes
+then :
+  printf "%s\n" "#define HAVE_NTOHLL 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "mkostemp" "ac_cv_func_mkostemp"
+if test "x$ac_cv_func_mkostemp" = xyes
+then :
+  printf "%s\n" "#define HAVE_MKOSTEMP 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "mount" "ac_cv_func_mount"
+if test "x$ac_cv_func_mount" = xyes
+then :
+  printf "%s\n" "#define HAVE_MOUNT 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "umount" "ac_cv_func_umount"
+if test "x$ac_cv_func_umount" = xyes
+then :
+  printf "%s\n" "#define HAVE_UMOUNT 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "umount2" "ac_cv_func_umount2"
+if test "x$ac_cv_func_umount2" = xyes
+then :
+  printf "%s\n" "#define HAVE_UMOUNT2 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "getentropy" "ac_cv_func_getentropy"
+if test "x$ac_cv_func_getentropy" = xyes
+then :
+  printf "%s\n" "#define HAVE_GETENTROPY 1" >>confdefs.h
+
+fi
 ac_fn_c_check_func "$LINENO" "prctl" "ac_cv_func_prctl"
 if test "x$ac_cv_func_prctl" = xyes
 then :
@@ -3909,6 +4070,18 @@ then :
 
 fi
 
+
+
+# Check whether --enable-sendfile was given.
+if test ${enable_sendfile+y}
+then :
+  enableval=$enable_sendfile; cf_use_sendfile=$enableval
+else $as_nop
+  cf_use_sendfile=auto
+fi
+
+if test "$cf_use_sendfile" != "no"
+then
 ac_header= ac_cache=
 for ac_item in $ac_header_c_list
 do
@@ -3938,17 +4111,72 @@ then :
 printf "%s\n" "#define STDC_HEADERS 1" >>confdefs.h
 
 fi
-ac_fn_c_check_header_compile "$LINENO" "sys/prctl.h" "ac_cv_header_sys_prctl_h" "$ac_includes_default"
-if test "x$ac_cv_header_sys_prctl_h" = xyes
+ac_fn_c_check_header_compile "$LINENO" "sys/sendfile.h" "ac_cv_header_sys_sendfile_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_sendfile_h" = xyes
 then :
-  printf "%s\n" "#define HAVE_SYS_PRCTL_H 1" >>confdefs.h
+  cf_use_sendfile=yes
+else $as_nop
+  cf_use_sendfile=no
+fi
+
+if test "$cf_use_sendfile" != "no"
+then
+ac_fn_c_check_func "$LINENO" "sendfile" "ac_cv_func_sendfile"
+if test "x$ac_cv_func_sendfile" = xyes
+then :
+  printf "%s\n" "#define HAVE_SENDFILE 1" >>confdefs.h
+
+fi
+
+fi
 
 fi
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for quick_exit in -lc" >&5
-printf %s "checking for quick_exit in -lc... " >&6; }
-if test ${ac_cv_lib_c_quick_exit+y}
+ac_fn_c_check_header_compile "$LINENO" "sys/random.h" "ac_cv_header_sys_random_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_random_h" = xyes
+then :
+  cf_use_sys_random=yes
+else $as_nop
+  cf_use_sys_random=no
+fi
+
+if test "$cf_use_sys_random" != "no"
+then
+printf "%s\n" "#define HAVE_SYS_RANDOM 1" >>confdefs.h
+
+fi
+
+
+
+# Check whether --enable-ip6 was given.
+if test ${enable_ip6+y}
+then :
+  enableval=$enable_ip6; cf_use_ip6=$enableval
+else $as_nop
+  cf_use_ip6=yes
+fi
+
+if test "$cf_use_ip6" = "yes"
+then
+printf "%s\n" "#define USE_INET6 1" >>confdefs.h
+
+fi
+
+
+# Check whether --enable-xattr was given.
+if test ${enable_xattr+y}
+then :
+  enableval=$enable_xattr; cf_use_xattr=$enableval
+else $as_nop
+  cf_use_xattr=yes
+fi
+
+if test "$cf_use_xattr" = "yes"
+then
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for getxattr in -lc" >&5
+printf %s "checking for getxattr in -lc... " >&6; }
+if test ${ac_cv_lib_c_getxattr+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
@@ -3960,268 +4188,217 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* Override any GCC internal prototype to avoid an error.
    Use char because int might match the return type of a GCC
    builtin and then its argument prototype would still apply.  */
-char quick_exit ();
+char getxattr ();
 int
 main (void)
 {
-return quick_exit ();
+return getxattr ();
   ;
   return 0;
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"
 then :
-  ac_cv_lib_c_quick_exit=yes
+  ac_cv_lib_c_getxattr=yes
 else $as_nop
-  ac_cv_lib_c_quick_exit=no
+  ac_cv_lib_c_getxattr=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_quick_exit" >&5
-printf "%s\n" "$ac_cv_lib_c_quick_exit" >&6; }
-if test "x$ac_cv_lib_c_quick_exit" = xyes
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_getxattr" >&5
+printf "%s\n" "$ac_cv_lib_c_getxattr" >&6; }
+if test "x$ac_cv_lib_c_getxattr" = xyes
 then :
-  cf_have_quick_exit=yes
+  printf "%s\n" "#define HAVE_LIBC 1" >>confdefs.h
+
+  LIBS="-lc $LIBS"
+
+fi
+
+cf_have_getxattr=$ac_cv_lib_c_getxattr
+if test "$cf_have_getxattr" = "yes"
+then
+printf "%s\n" "#define HAVE_XATTR 1" >>confdefs.h
+
+fi
+fi
+
+# Check whether --enable-fsflags was given.
+if test ${enable_fsflags+y}
+then :
+  enableval=$enable_fsflags; cf_use_fsflags=$enableval
 else $as_nop
-  cf_have_quick_exit=no
+  cf_use_fsflags=no
 fi
 
-if test "$cf_have_quick_exit" = "yes"
+
+if test "$cf_use_fsflags" = "yes"
 then
-printf "%s\n" "#define HAVE_QUICK_EXIT 1" >>confdefs.h
+ac_fn_c_check_header_compile "$LINENO" "linux/fs.h" "ac_cv_header_linux_fs_h" "$ac_includes_default"
+if test "x$ac_cv_header_linux_fs_h" = xyes
+then :
+  cf_have_fsflags=yes
+fi
 
 fi
 
-if test "$cf_system_libuseful" != "no"
+if test "$cf_have_fsflags" = "yes"
 then
-	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for GetToken in -lUseful-5" >&5
-printf %s "checking for GetToken in -lUseful-5... " >&6; }
-if test ${ac_cv_lib_Useful_5_GetToken+y}
+printf "%s\n" "#define USE_FSFLAGS 1" >>confdefs.h
+
+fi
+
+
+
+# Check whether --enable-namespaces was given.
+if test ${enable_namespaces+y}
+then :
+  enableval=$enable_namespaces; cf_use_namespaces=$enableval
+else $as_nop
+  cf_use_namespaces=yes
+fi
+
+if test "$cf_use_namespaces" = "yes"
+then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for unshare in -lc" >&5
+printf %s "checking for unshare in -lc... " >&6; }
+if test ${ac_cv_lib_c_unshare+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
   ac_check_lib_save_LIBS=$LIBS
-LIBS="-lUseful-5  $LIBS"
+LIBS="-lc  $LIBS"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
 /* Override any GCC internal prototype to avoid an error.
    Use char because int might match the return type of a GCC
    builtin and then its argument prototype would still apply.  */
-char GetToken ();
+char unshare ();
 int
 main (void)
 {
-return GetToken ();
+return unshare ();
   ;
   return 0;
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"
 then :
-  ac_cv_lib_Useful_5_GetToken=yes
+  ac_cv_lib_c_unshare=yes
 else $as_nop
-  ac_cv_lib_Useful_5_GetToken=no
+  ac_cv_lib_c_unshare=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_Useful_5_GetToken" >&5
-printf "%s\n" "$ac_cv_lib_Useful_5_GetToken" >&6; }
-if test "x$ac_cv_lib_Useful_5_GetToken" = xyes
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_unshare" >&5
+printf "%s\n" "$ac_cv_lib_c_unshare" >&6; }
+if test "x$ac_cv_lib_c_unshare" = xyes
 then :
-  cf_have_libUseful5=yes
-else $as_nop
-  cf_have_libUseful5=no
-fi
+  printf "%s\n" "#define HAVE_LIBC 1" >>confdefs.h
 
-	if test "$cf_have_libUseful5" = "yes"
-	then
-	ac_fn_c_check_header_compile "$LINENO" "libUseful-5/libUseful.h" "ac_cv_header_libUseful_5_libUseful_h" "$ac_includes_default"
-if test "x$ac_cv_header_libUseful_5_libUseful_h" = xyes
-then :
-  printf "%s\n" "#define HAVE_LIBUSEFUL_5_LIBUSEFUL_H 1" >>confdefs.h
+  LIBS="-lc $LIBS"
 
 fi
 
-	else
-	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for GetToken in -lUseful-4" >&5
-printf %s "checking for GetToken in -lUseful-4... " >&6; }
-if test ${ac_cv_lib_Useful_4_GetToken+y}
+        cf_have_unshare=$ac_cv_lib_c_unshare
+        if test "$cf_have_unshare" = "yes"
+        then
+                printf "%s\n" "#define HAVE_UNSHARE 1" >>confdefs.h
+
+        fi
+
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for setns in -lc" >&5
+printf %s "checking for setns in -lc... " >&6; }
+if test ${ac_cv_lib_c_setns+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
   ac_check_lib_save_LIBS=$LIBS
-LIBS="-lUseful-4  $LIBS"
+LIBS="-lc  $LIBS"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
 /* Override any GCC internal prototype to avoid an error.
    Use char because int might match the return type of a GCC
    builtin and then its argument prototype would still apply.  */
-char GetToken ();
+char setns ();
 int
 main (void)
 {
-return GetToken ();
+return setns ();
   ;
   return 0;
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"
 then :
-  ac_cv_lib_Useful_4_GetToken=yes
+  ac_cv_lib_c_setns=yes
 else $as_nop
-  ac_cv_lib_Useful_4_GetToken=no
+  ac_cv_lib_c_setns=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_Useful_4_GetToken" >&5
-printf "%s\n" "$ac_cv_lib_Useful_4_GetToken" >&6; }
-if test "x$ac_cv_lib_Useful_4_GetToken" = xyes
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_setns" >&5
+printf "%s\n" "$ac_cv_lib_c_setns" >&6; }
+if test "x$ac_cv_lib_c_setns" = xyes
 then :
-  cf_have_libUseful4=yes
+  printf "%s\n" "#define HAVE_LIBC 1" >>confdefs.h
+
+  LIBS="-lc $LIBS"
+
+fi
+
+        cf_have_setns=$ac_cv_lib_c_setns
+        if test "$cf_have_setns" = "yes"
+        then
+                printf "%s\n" "#define HAVE_SETNS 1" >>confdefs.h
+
+        fi
+fi
+
+
+
+# Check whether --enable-ssl was given.
+if test ${enable_ssl+y}
+then :
+  enableval=$enable_ssl; cf_use_ssl=$enableval
 else $as_nop
-  cf_have_libUseful4=no
+  cf_use_ssl=no
 fi
 
-	ac_fn_c_check_header_compile "$LINENO" "libUseful-4/libUseful.h" "ac_cv_header_libUseful_4_libUseful_h" "$ac_includes_default"
-if test "x$ac_cv_header_libUseful_4_libUseful_h" = xyes
-then :
-  printf "%s\n" "#define HAVE_LIBUSEFUL_4_LIBUSEFUL_H 1" >>confdefs.h
-
-fi
-
-	fi
-fi
-
-if test "$cf_have_libUseful5" = "yes"
-then
-  echo "installed libUseful-5 found, using that instead of bundled libUseful."
-  echo "if you want to use bundled libUseful, force it with --with-libuseful=no"
-  LIBUSEFUL_BUNDLED=""
-
-  printf "%s\n" "#define HAVE_LIBUSEFUL5 1" >>confdefs.h
-
-      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for GetToken in -lUseful-5" >&5
-printf %s "checking for GetToken in -lUseful-5... " >&6; }
-if test ${ac_cv_lib_Useful_5_GetToken+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lUseful-5  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-char GetToken ();
-int
-main (void)
-{
-return GetToken ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"
-then :
-  ac_cv_lib_Useful_5_GetToken=yes
-else $as_nop
-  ac_cv_lib_Useful_5_GetToken=no
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_Useful_5_GetToken" >&5
-printf "%s\n" "$ac_cv_lib_Useful_5_GetToken" >&6; }
-if test "x$ac_cv_lib_Useful_5_GetToken" = xyes
-then :
-  printf "%s\n" "#define HAVE_LIBUSEFUL_5 1" >>confdefs.h
-
-  LIBS="-lUseful-5 $LIBS"
-
-fi
-
-
-  cf_use_ssl="yes"
-
-elif test "$cf_have_libUseful4" = "yes"
-then
-  echo "installed libUseful-4 found, using that instead of bundled libUseful."
-  echo "if you want to use bundled libUseful, force it with --with-libuseful=no"
-  LIBUSEFUL_BUNDLED=""
-
-  printf "%s\n" "#define HAVE_LIBUSEFUL4 1" >>confdefs.h
-
-      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for GetToken in -lUseful-4" >&5
-printf %s "checking for GetToken in -lUseful-4... " >&6; }
-if test ${ac_cv_lib_Useful_4_GetToken+y}
-then :
-  printf %s "(cached) " >&6
-else $as_nop
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lUseful-4  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-char GetToken ();
-int
-main (void)
-{
-return GetToken ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"
-then :
-  ac_cv_lib_Useful_4_GetToken=yes
-else $as_nop
-  ac_cv_lib_Useful_4_GetToken=no
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_Useful_4_GetToken" >&5
-printf "%s\n" "$ac_cv_lib_Useful_4_GetToken" >&6; }
-if test "x$ac_cv_lib_Useful_4_GetToken" = xyes
-then :
-  printf "%s\n" "#define HAVE_LIBUSEFUL_4 1" >>confdefs.h
-
-  LIBS="-lUseful-4 $LIBS"
-
-fi
-
-
-  cf_use_ssl="yes"
-else
-  printf "%s\n" "#define HAVE_LIBUSEFUL5 1" >>confdefs.h
-
-  LIBUSEFUL_BUNDLED="libUseful-bundled/libUseful.a"
-
-
-
-subdirs="$subdirs libUseful-bundled"
-
-fi
 
 if test "$cf_use_ssl" = "yes"
 then
 
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for EVP_CIPHER_CTX_init in -lcrypto" >&5
+ac_fn_c_check_header_compile "$LINENO" "openssl/crypto.h" "ac_cv_header_openssl_crypto_h" "$ac_includes_default"
+if test "x$ac_cv_header_openssl_crypto_h" = xyes
+then :
+
+fi
+
+ac_fn_c_check_header_compile "$LINENO" "openssl/ssl.h" "ac_cv_header_openssl_ssl_h" "$ac_includes_default"
+if test "x$ac_cv_header_openssl_ssl_h" = xyes
+then :
+
+fi
+
+#include <openssl/crypto.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#include <openssl/asn1.h>
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for EVP_CIPHER_CTX_init in -lcrypto" >&5
 printf %s "checking for EVP_CIPHER_CTX_init in -lcrypto... " >&6; }
 if test ${ac_cv_lib_crypto_EVP_CIPHER_CTX_init+y}
 then :
@@ -4264,11 +4441,11 @@ then :
 
 fi
 
-        cf_have_libcrypto=$ac_cv_lib_crypto_EVP_CIPHER_CTX_init
+cf_have_libcrypto=$ac_cv_lib_crypto_EVP_CIPHER_CTX_init
 
-                if test "$cf_have_libcrypto" != "yes"
-        then
-                { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for EVP_CIPHER_CTX_new in -lcrypto" >&5
+if test "$cf_have_libcrypto" != "yes"
+then
+	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for EVP_CIPHER_CTX_new in -lcrypto" >&5
 printf %s "checking for EVP_CIPHER_CTX_new in -lcrypto... " >&6; }
 if test ${ac_cv_lib_crypto_EVP_CIPHER_CTX_new+y}
 then :
@@ -4311,11 +4488,11 @@ then :
 
 fi
 
-                cf_have_libcrypto=$ac_cv_lib_crypto_EVP_CIPHER_CTX_new
-        fi
+	cf_have_libcrypto=$ac_cv_lib_crypto_EVP_CIPHER_CTX_new
+fi
 
 
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SSL_library_init in -lssl" >&5
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for SSL_library_init in -lssl" >&5
 printf %s "checking for SSL_library_init in -lssl... " >&6; }
 if test ${ac_cv_lib_ssl_SSL_library_init+y}
 then :
@@ -4358,11 +4535,11 @@ then :
 
 fi
 
-        cf_have_libssl=$ac_cv_lib_ssl_SSL_library_init
+cf_have_libssl=$ac_cv_lib_ssl_SSL_library_init
 
-                if test "$cf_have_libssl" != "yes"
-        then
-                { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for OPENSSL_init_ssl in -lssl" >&5
+if test "$cf_have_libssl" != "yes"
+then
+	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for OPENSSL_init_ssl in -lssl" >&5
 printf %s "checking for OPENSSL_init_ssl in -lssl... " >&6; }
 if test ${ac_cv_lib_ssl_OPENSSL_init_ssl+y}
 then :
@@ -4405,17 +4582,364 @@ then :
 
 fi
 
-                cf_have_libssl=$ac_cv_lib_ssl_OPENSSL_init_ssl
-        fi
-
-	cf_use_zlib="yes"
+	cf_have_libssl=$ac_cv_lib_ssl_OPENSSL_init_ssl
 fi
 
 
 
-if test "$cf_use_zlib" = "yes"
+if test "$cf_have_libssl" = "yes"
 then
-	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for deflate in -lz" >&5
+cf_use_zlib=yes
+
+ac_fn_c_check_func "$LINENO" "OpenSSL_add_all_algorithms" "ac_cv_func_OpenSSL_add_all_algorithms"
+if test "x$ac_cv_func_OpenSSL_add_all_algorithms" = xyes
+then :
+  printf "%s\n" "#define HAVE_OPENSSL_ADD_ALL_ALGORITHMS 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "EVP_MD_CTX_create" "ac_cv_func_EVP_MD_CTX_create"
+if test "x$ac_cv_func_EVP_MD_CTX_create" = xyes
+then :
+  printf "%s\n" "#define HAVE_EVP_MD_CTX_CREATE 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "EVP_MD_CTX_new" "ac_cv_func_EVP_MD_CTX_new"
+if test "x$ac_cv_func_EVP_MD_CTX_new" = xyes
+then :
+  printf "%s\n" "#define HAVE_EVP_MD_CTX_NEW 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "EVP_MD_CTX_destroy" "ac_cv_func_EVP_MD_CTX_destroy"
+if test "x$ac_cv_func_EVP_MD_CTX_destroy" = xyes
+then :
+  printf "%s\n" "#define HAVE_EVP_MD_CTX_DESTROY 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "EVP_MD_CTX_free" "ac_cv_func_EVP_MD_CTX_free"
+if test "x$ac_cv_func_EVP_MD_CTX_free" = xyes
+then :
+  printf "%s\n" "#define HAVE_EVP_MD_CTX_FREE 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "X509_check_host" "ac_cv_func_X509_check_host"
+if test "x$ac_cv_func_X509_check_host" = xyes
+then :
+  printf "%s\n" "#define HAVE_X509_CHECK_HOST 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "SSL_set_tlsext_host_name" "ac_cv_func_SSL_set_tlsext_host_name"
+if test "x$ac_cv_func_SSL_set_tlsext_host_name" = xyes
+then :
+  printf "%s\n" "#define HAVE_SSL_SET_TLSEXT_HOST_NAME 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "SSL_set_min_proto_version" "ac_cv_func_SSL_set_min_proto_version"
+if test "x$ac_cv_func_SSL_set_min_proto_version" = xyes
+then :
+  printf "%s\n" "#define HAVE_SSL_SET_MIN_PROTO_VERSION 1" >>confdefs.h
+
+fi
+ac_fn_c_check_func "$LINENO" "EVP_CIPHER_fetch" "ac_cv_func_EVP_CIPHER_fetch"
+if test "x$ac_cv_func_EVP_CIPHER_fetch" = xyes
+then :
+  printf "%s\n" "#define HAVE_EVP_CIPHER_FETCH 1" >>confdefs.h
+
+fi
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $CC options needed to detect all undeclared functions" >&5
+printf %s "checking for $CC options needed to detect all undeclared functions... " >&6; }
+if test ${ac_cv_c_undeclared_builtin_options+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_save_CFLAGS=$CFLAGS
+   ac_cv_c_undeclared_builtin_options='cannot detect'
+   for ac_arg in '' -fno-builtin; do
+     CFLAGS="$ac_save_CFLAGS $ac_arg"
+     # This test program should *not* compile successfully.
+     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+(void) strchr;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+
+else $as_nop
+  # This test program should compile successfully.
+        # No library function is consistently available on
+        # freestanding implementations, so test against a dummy
+        # declaration.  Include always-available headers on the
+        # off chance that they somehow elicit warnings.
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <float.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <stddef.h>
+extern void ac_decl (int, char *);
+
+int
+main (void)
+{
+(void) ac_decl (0, (char *) 0);
+  (void) ac_decl;
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+  if test x"$ac_arg" = x
+then :
+  ac_cv_c_undeclared_builtin_options='none needed'
+else $as_nop
+  ac_cv_c_undeclared_builtin_options=$ac_arg
+fi
+          break
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+    done
+    CFLAGS=$ac_save_CFLAGS
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_c_undeclared_builtin_options" >&5
+printf "%s\n" "$ac_cv_c_undeclared_builtin_options" >&6; }
+  case $ac_cv_c_undeclared_builtin_options in #(
+  'cannot detect') :
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "cannot make $CC report undeclared builtins
+See \`config.log' for more details" "$LINENO" 5; } ;; #(
+  'none needed') :
+    ac_c_undeclared_builtin_options='' ;; #(
+  *) :
+    ac_c_undeclared_builtin_options=$ac_cv_c_undeclared_builtin_options ;;
+esac
+
+ac_fn_check_decl "$LINENO" "OpenSSL_add_all_algorithms" "ac_cv_have_decl_OpenSSL_add_all_algorithms" "#include <openssl/ssl.h>
+" "$ac_c_undeclared_builtin_options" "CFLAGS"
+if test "x$ac_cv_have_decl_OpenSSL_add_all_algorithms" = xyes
+then :
+  ac_have_decl=1
+else $as_nop
+  ac_have_decl=0
+fi
+printf "%s\n" "#define HAVE_DECL_OPENSSL_ADD_ALL_ALGORITHMS $ac_have_decl" >>confdefs.h
+if test $ac_have_decl = 1
+then :
+  printf "%s\n" "#define HAVE_OPENSSL_ADD_ALL_ALGORITHMS 1" >>confdefs.h
+
+fi
+
+ac_fn_check_decl "$LINENO" "SSL_set_tlsext_host_name" "ac_cv_have_decl_SSL_set_tlsext_host_name" "#include <openssl/ssl.h>
+" "$ac_c_undeclared_builtin_options" "CFLAGS"
+if test "x$ac_cv_have_decl_SSL_set_tlsext_host_name" = xyes
+then :
+  ac_have_decl=1
+else $as_nop
+  ac_have_decl=0
+fi
+printf "%s\n" "#define HAVE_DECL_SSL_SET_TLSEXT_HOST_NAME $ac_have_decl" >>confdefs.h
+if test $ac_have_decl = 1
+then :
+  printf "%s\n" "#define HAVE_SSL_SET_TLSEXT_HOST_NAME 1" >>confdefs.h
+
+fi
+
+
+ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking that OpenSSL Library is at least version 0.9.7" >&5
+printf %s "checking that OpenSSL Library is at least version 0.9.7... " >&6; }
+ ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking how to run the C preprocessor" >&5
+printf %s "checking how to run the C preprocessor... " >&6; }
+# On Suns, sometimes $CPP names a directory.
+if test -n "$CPP" && test -d "$CPP"; then
+  CPP=
+fi
+if test -z "$CPP"; then
+  if test ${ac_cv_prog_CPP+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+      # Double quotes because $CC needs to be expanded
+    for CPP in "$CC -E" "$CC -E -traditional-cpp" cpp /lib/cpp
+    do
+      ac_preproc_ok=false
+for ac_c_preproc_warn_flag in '' yes
+do
+  # Use a header file that comes with gcc, so configuring glibc
+  # with a fresh cross-compiler works.
+  # On the NeXT, cc -E runs the code through the compiler's parser,
+  # not just through cpp. "Syntax error" is here to catch this case.
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <limits.h>
+		     Syntax error
+_ACEOF
+if ac_fn_c_try_cpp "$LINENO"
+then :
+
+else $as_nop
+  # Broken: fails on valid input.
+continue
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+  # OK, works on sane cases.  Now check whether nonexistent headers
+  # can be detected and how.
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <ac_nonexistent.h>
+_ACEOF
+if ac_fn_c_try_cpp "$LINENO"
+then :
+  # Broken: success on invalid input.
+continue
+else $as_nop
+  # Passes both tests.
+ac_preproc_ok=:
+break
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+done
+# Because of `break', _AC_PREPROC_IFELSE's cleaning code was skipped.
+rm -f conftest.i conftest.err conftest.$ac_ext
+if $ac_preproc_ok
+then :
+  break
+fi
+
+    done
+    ac_cv_prog_CPP=$CPP
+
+fi
+  CPP=$ac_cv_prog_CPP
+else
+  ac_cv_prog_CPP=$CPP
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $CPP" >&5
+printf "%s\n" "$CPP" >&6; }
+ac_preproc_ok=false
+for ac_c_preproc_warn_flag in '' yes
+do
+  # Use a header file that comes with gcc, so configuring glibc
+  # with a fresh cross-compiler works.
+  # On the NeXT, cc -E runs the code through the compiler's parser,
+  # not just through cpp. "Syntax error" is here to catch this case.
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <limits.h>
+		     Syntax error
+_ACEOF
+if ac_fn_c_try_cpp "$LINENO"
+then :
+
+else $as_nop
+  # Broken: fails on valid input.
+continue
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+  # OK, works on sane cases.  Now check whether nonexistent headers
+  # can be detected and how.
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <ac_nonexistent.h>
+_ACEOF
+if ac_fn_c_try_cpp "$LINENO"
+then :
+  # Broken: success on invalid input.
+continue
+else $as_nop
+  # Passes both tests.
+ac_preproc_ok=:
+break
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+
+done
+# Because of `break', _AC_PREPROC_IFELSE's cleaning code was skipped.
+rm -f conftest.i conftest.err conftest.$ac_ext
+if $ac_preproc_ok
+then :
+
+else $as_nop
+  { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "C preprocessor \"$CPP\" fails sanity check
+See \`config.log' for more details" "$LINENO" 5; }
+fi
+
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+		#include <openssl/evp.h>
+		#if SSLEAY_VERSION_NUMBER >= 0x00907000L
+		yes
+		#endif
+
+_ACEOF
+if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
+  $EGREP "yes" >/dev/null 2>&1
+then :
+
+		{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+#    AC_DEFINE(USE_OPENSSL_ADD_ALL_ALGORITHMS, 1, [Use OpenSSL_add_all_algorithms])
+
+else $as_nop
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+rm -rf conftest*
+
+
+
+
+
+fi
+
+
+fi
+
+
+
+# Check whether --enable-zlib was given.
+if test ${enable_zlib+y}
+then :
+  enableval=$enable_zlib; cf_use_zlib=$enableval
+else $as_nop
+  cf_use_zlib=no
+fi
+
+
+if test "$cf_use_zlib" = "yes" -o "$cf_use_ssl" = "yes"
+then
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for deflate in -lz" >&5
 printf %s "checking for deflate in -lz... " >&6; }
 if test ${ac_cv_lib_z_deflate+y}
 then :
@@ -4458,7 +4982,195 @@ then :
 
 fi
 
+cf_have_libz=$ac_cv_lib_z_deflate
 fi
+
+
+# Check whether --enable-simd was given.
+if test ${enable_simd+y}
+then :
+  enableval=$enable_simd; cf_use_simd=$enableval
+fi
+
+
+
+case $cf_use_simd in
+mmx) SIMD_CFLAGS="-mmmx"
+;;
+sse) SIMD_CFLAGS="-mmmx -msse"
+;;
+sse2) SIMD_CFLAGS="-mmmx -msse -msse2"
+;;
+esac
+
+
+cf_have_capabilities=no
+# Check whether --enable-capabilities was given.
+if test ${enable_capabilities+y}
+then :
+  enableval=$enable_capabilities; cf_use_capabilities=$enableval
+else $as_nop
+  cf_use_capabilities=no
+fi
+
+
+if test "$cf_use_capabilities" = "yes"
+then
+ac_fn_c_check_header_compile "$LINENO" "sys/capability.h" "ac_cv_header_sys_capability_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_capability_h" = xyes
+then :
+  cf_have_capabilities=yes
+fi
+
+ac_fn_c_check_header_compile "$LINENO" "linux/capability.h" "ac_cv_header_linux_capability_h" "$ac_includes_default"
+if test "x$ac_cv_header_linux_capability_h" = xyes
+then :
+  cf_have_capabilities=yes
+fi
+
+fi
+
+if test "$cf_have_capabilities" = "yes"
+then
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for cap_init in -lcap" >&5
+printf %s "checking for cap_init in -lcap... " >&6; }
+if test ${ac_cv_lib_cap_cap_init+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lcap  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char cap_init ();
+int
+main (void)
+{
+return cap_init ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_cap_cap_init=yes
+else $as_nop
+  ac_cv_lib_cap_cap_init=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cap_cap_init" >&5
+printf "%s\n" "$ac_cv_lib_cap_cap_init" >&6; }
+if test "x$ac_cv_lib_cap_cap_init" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBCAP 1" >>confdefs.h
+
+  LIBS="-lcap $LIBS"
+
+fi
+
+printf "%s\n" "#define USE_CAPABILITIES 1" >>confdefs.h
+
+fi
+
+
+
+# Check whether --enable-seccomp was given.
+if test ${enable_seccomp+y}
+then :
+  enableval=$enable_seccomp; cf_use_seccomp=$enableval
+else $as_nop
+  cf_use_seccomp=no
+fi
+
+
+if test "$cf_use_seccomp" = "yes"
+then
+ac_fn_c_check_header_compile "$LINENO" "linux/seccomp.h" "ac_cv_header_linux_seccomp_h" "$ac_includes_default"
+if test "x$ac_cv_header_linux_seccomp_h" = xyes
+then :
+
+else $as_nop
+  cf_use_seccomp=no
+fi
+
+ac_fn_c_check_header_compile "$LINENO" "linux/filter.h" "ac_cv_header_linux_filter_h" "$ac_includes_default"
+if test "x$ac_cv_header_linux_filter_h" = xyes
+then :
+
+else $as_nop
+  cf_use_seccomp=no
+fi
+
+ac_fn_c_check_header_compile "$LINENO" "linux/bpf.h" "ac_cv_header_linux_bpf_h" "$ac_includes_default"
+if test "x$ac_cv_header_linux_bpf_h" = xyes
+then :
+
+else $as_nop
+  cf_use_seccomp=no
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for prctl in -lc" >&5
+printf %s "checking for prctl in -lc... " >&6; }
+if test ${ac_cv_lib_c_prctl+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lc  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char prctl ();
+int
+main (void)
+{
+return prctl ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_c_prctl=yes
+else $as_nop
+  ac_cv_lib_c_prctl=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_prctl" >&5
+printf "%s\n" "$ac_cv_lib_c_prctl" >&6; }
+if test "x$ac_cv_lib_c_prctl" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBC 1" >>confdefs.h
+
+  LIBS="-lc $LIBS"
+
+else $as_nop
+  cf_use_seccomp=no
+fi
+
+if test "$cf_use_seccomp" = "yes"
+then
+printf "%s\n" "#define USE_SECCOMP 1" >>confdefs.h
+
+fi
+
+fi
+
+
+
 
 ac_config_files="$ac_config_files Makefile"
 
@@ -5062,7 +5774,6 @@ gives unlimited permission to copy, distribute and modify it."
 
 ac_pwd='$ac_pwd'
 srcdir='$srcdir'
-INSTALL='$INSTALL'
 test -n "\$AWK" || AWK=awk
 _ACEOF
 
@@ -5498,10 +6209,6 @@ ac_abs_srcdir=$ac_abs_top_srcdir$ac_dir_suffix
   # CONFIG_FILE
   #
 
-  case $INSTALL in
-  [\\/$]* | ?:[\\/]* ) ac_INSTALL=$INSTALL ;;
-  *) ac_INSTALL=$ac_top_build_prefix$INSTALL ;;
-  esac
 _ACEOF
 
 cat >>$CONFIG_STATUS <<\_ACEOF || ac_write_fail=1
@@ -5555,7 +6262,6 @@ s&@abs_top_srcdir@&$ac_abs_top_srcdir&;t t
 s&@builddir@&$ac_builddir&;t t
 s&@abs_builddir@&$ac_abs_builddir&;t t
 s&@abs_top_builddir@&$ac_abs_top_builddir&;t t
-s&@INSTALL@&$ac_INSTALL&;t t
 $ac_datarootdir_hack
 "
 eval sed \"\$ac_sed_extra\" "$ac_file_inputs" | $AWK -f "$ac_tmp/subs.awk" \
@@ -5613,153 +6319,91 @@ if test "$no_create" != yes; then
   # would make configure fail if this is the last instruction.
   $ac_cs_success || as_fn_exit 1
 fi
-
-#
-# CONFIG_SUBDIRS section.
-#
-if test "$no_recursion" != yes; then
-
-  # Remove --cache-file, --srcdir, and --disable-option-checking arguments
-  # so they do not pile up.
-  ac_sub_configure_args=
-  ac_prev=
-  eval "set x $ac_configure_args"
-  shift
-  for ac_arg
-  do
-    if test -n "$ac_prev"; then
-      ac_prev=
-      continue
-    fi
-    case $ac_arg in
-    -cache-file | --cache-file | --cache-fil | --cache-fi \
-    | --cache-f | --cache- | --cache | --cach | --cac | --ca | --c)
-      ac_prev=cache_file ;;
-    -cache-file=* | --cache-file=* | --cache-fil=* | --cache-fi=* \
-    | --cache-f=* | --cache-=* | --cache=* | --cach=* | --cac=* | --ca=* \
-    | --c=*)
-      ;;
-    --config-cache | -C)
-      ;;
-    -srcdir | --srcdir | --srcdi | --srcd | --src | --sr)
-      ac_prev=srcdir ;;
-    -srcdir=* | --srcdir=* | --srcdi=* | --srcd=* | --src=* | --sr=*)
-      ;;
-    -prefix | --prefix | --prefi | --pref | --pre | --pr | --p)
-      ac_prev=prefix ;;
-    -prefix=* | --prefix=* | --prefi=* | --pref=* | --pre=* | --pr=* | --p=*)
-      ;;
-    --disable-option-checking)
-      ;;
-    *)
-      case $ac_arg in
-      *\'*) ac_arg=`printf "%s\n" "$ac_arg" | sed "s/'/'\\\\\\\\''/g"` ;;
-      esac
-      as_fn_append ac_sub_configure_args " '$ac_arg'" ;;
-    esac
-  done
-
-  # Always prepend --prefix to ensure using the same prefix
-  # in subdir configurations.
-  ac_arg="--prefix=$prefix"
-  case $ac_arg in
-  *\'*) ac_arg=`printf "%s\n" "$ac_arg" | sed "s/'/'\\\\\\\\''/g"` ;;
-  esac
-  ac_sub_configure_args="'$ac_arg' $ac_sub_configure_args"
-
-  # Pass --silent
-  if test "$silent" = yes; then
-    ac_sub_configure_args="--silent $ac_sub_configure_args"
-  fi
-
-  # Always prepend --disable-option-checking to silence warnings, since
-  # different subdirs can have different --enable and --with options.
-  ac_sub_configure_args="--disable-option-checking $ac_sub_configure_args"
-
-  ac_popdir=`pwd`
-  for ac_dir in : $subdirs; do test "x$ac_dir" = x: && continue
-
-    # Do not complain, so a configure script can configure whichever
-    # parts of a large source tree are present.
-    test -d "$srcdir/$ac_dir" || continue
-
-    ac_msg="=== configuring in $ac_dir (`pwd`/$ac_dir)"
-    printf "%s\n" "$as_me:${as_lineno-$LINENO}: $ac_msg" >&5
-    printf "%s\n" "$ac_msg" >&6
-    as_dir="$ac_dir"; as_fn_mkdir_p
-    ac_builddir=.
-
-case "$ac_dir" in
-.) ac_dir_suffix= ac_top_builddir_sub=. ac_top_build_prefix= ;;
-*)
-  ac_dir_suffix=/`printf "%s\n" "$ac_dir" | sed 's|^\.[\\/]||'`
-  # A ".." for each directory in $ac_dir_suffix.
-  ac_top_builddir_sub=`printf "%s\n" "$ac_dir_suffix" | sed 's|/[^\\/]*|/..|g;s|/||'`
-  case $ac_top_builddir_sub in
-  "") ac_top_builddir_sub=. ac_top_build_prefix= ;;
-  *)  ac_top_build_prefix=$ac_top_builddir_sub/ ;;
-  esac ;;
-esac
-ac_abs_top_builddir=$ac_pwd
-ac_abs_builddir=$ac_pwd$ac_dir_suffix
-# for backward compatibility:
-ac_top_builddir=$ac_top_build_prefix
-
-case $srcdir in
-  .)  # We are building in place.
-    ac_srcdir=.
-    ac_top_srcdir=$ac_top_builddir_sub
-    ac_abs_top_srcdir=$ac_pwd ;;
-  [\\/]* | ?:[\\/]* )  # Absolute name.
-    ac_srcdir=$srcdir$ac_dir_suffix;
-    ac_top_srcdir=$srcdir
-    ac_abs_top_srcdir=$srcdir ;;
-  *) # Relative name.
-    ac_srcdir=$ac_top_build_prefix$srcdir$ac_dir_suffix
-    ac_top_srcdir=$ac_top_build_prefix$srcdir
-    ac_abs_top_srcdir=$ac_pwd/$srcdir ;;
-esac
-ac_abs_srcdir=$ac_abs_top_srcdir$ac_dir_suffix
-
-
-    cd "$ac_dir"
-
-    # Check for configure.gnu first; this name is used for a wrapper for
-    # Metaconfig's "Configure" on case-insensitive file systems.
-    if test -f "$ac_srcdir/configure.gnu"; then
-      ac_sub_configure=$ac_srcdir/configure.gnu
-    elif test -f "$ac_srcdir/configure"; then
-      ac_sub_configure=$ac_srcdir/configure
-    else
-      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: no configuration information is in $ac_dir" >&5
-printf "%s\n" "$as_me: WARNING: no configuration information is in $ac_dir" >&2;}
-      ac_sub_configure=
-    fi
-
-    # The recursion is here.
-    if test -n "$ac_sub_configure"; then
-      # Make the cache file name correct relative to the subdirectory.
-      case $cache_file in
-      [\\/]* | ?:[\\/]* ) ac_sub_cache_file=$cache_file ;;
-      *) # Relative name.
-	ac_sub_cache_file=$ac_top_build_prefix$cache_file ;;
-      esac
-
-      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: running $SHELL $ac_sub_configure $ac_sub_configure_args --cache-file=$ac_sub_cache_file --srcdir=$ac_srcdir" >&5
-printf "%s\n" "$as_me: running $SHELL $ac_sub_configure $ac_sub_configure_args --cache-file=$ac_sub_cache_file --srcdir=$ac_srcdir" >&6;}
-      # The eval makes quoting arguments work.
-      eval "\$SHELL \"\$ac_sub_configure\" $ac_sub_configure_args \
-	   --cache-file=\"\$ac_sub_cache_file\" --srcdir=\"\$ac_srcdir\"" ||
-	as_fn_error $? "$ac_sub_configure failed for $ac_dir" "$LINENO" 5
-    fi
-
-    cd "$ac_popdir"
-  done
-fi
 if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 printf "%s\n" "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
 
+
+echo
+echo
+echo "############# libUseful Build Config: #############"
+
+echo "compile with -Wall - $cf_use_wall"
+echo "compile with -Werror - $cf_use_werror"
+echo "compile with FORTIFY_SOURCE=3 - $cf_use_fortify"
+echo "compile with -fstack-protector-strong - $cf_use_stackprotect"
+
+if test "$ac_cv_sys_file_offset_bits" = "64"
+then
+echo "Largefiles ( > 2GB ) enabled"
+else
+echo "Largefiles ( > 2GB ) NOT enabled"
+fi
+
+if test "$cf_have_getxattr" = "yes"
+then
+echo "Filesystem attribues (xattr) enabled"
+else
+echo "Filesystem attribues (xattr) NOT enabled"
+fi
+
+
+if test "$ac_cv_func_sendfile" = "yes"
+then
+echo "Linux sendfile syscall enabled"
+else
+echo "Linux sendfile syscall NOT enabled"
+fi
+
+
+if test "$cf_use_ip6" = "yes"
+then
+echo "IPv6 enabled"
+else
+echo "IPv6 NOT enabled"
+fi
+
+if test "$cf_have_libssl" = "yes"
+then
+echo "SSL/TLS enabled"
+else
+echo "SSL/TLS NOT enabled"
+fi
+
+if test "$cf_have_libz" = "yes"
+then
+echo "zlib support enabled"
+else
+echo "zlib NOT enabled"
+fi
+
+if test "$cf_have_fsflags" = "yes"
+then
+echo "support for FS_APPEND_FL and FS_IMMUTABLE_FL flags and hardened logs enabled"
+else
+echo "support for FS_APPEND_FL and FS_IMMUTABLE_FL flags and hardened logs NOT enabled"
+fi
+
+if test "$cf_have_unshare" = "yes" -o "$cf_have_setns" = "yes"
+then
+echo "linux namespace support enabled"
+else
+echo "linux namespace support NOT enabled"
+fi
+
+if test "$cf_have_capabilities" = "yes"
+then
+echo "linux capabilities support enabled"
+else
+echo "linux capabilities support NOT enabled"
+fi
+
+if test "$cf_use_seccomp" = "yes"
+then
+echo "linux seccomp support enabled"
+else
+echo "linux seccomp support NOT enabled"
+fi
 
 

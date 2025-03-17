@@ -11,11 +11,11 @@ mandir=$(prefix)@mandir@
 all: @LIBUSEFUL_BUNDLED@
 	$(CC) $(FLAGS) -g -ogetlock main.c @LIBUSEFUL_BUNDLED@ $(LIBS) 
 
-libUseful-5/libUseful.a:
-	$(MAKE) -C libUseful-5
+libUseful-bundled/libUseful.a:
+	$(MAKE) -C libUseful-bundled
 
 clean:
-	@rm -f getlock libUseful-5/*.o libUseful-5/*.a libUseful-5/*.so libUseful-5/*.so.*
+	@rm -f getlock libUseful-bundled/*.o libUseful-bundled/*.a libUseful-bundled/*.so libUseful-bundled/*.so.*
 
 
 

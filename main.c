@@ -61,7 +61,7 @@ typedef struct
 
 TSettings Settings;
 
-char *Version="4.0";
+char *Version="4.1";
 
 
 void OpenSysLog()
@@ -102,7 +102,16 @@ void SigHandler(int sig)
     if (sig==SIGALRM)
     {
         kill(0,SIGKILL);
-        exit(1);
+
+        //use async/thread-safe quick_exit if available
+#ifdef HAVE_QUICK_EXIT
+        quick_exit(1);
+#endif
+
+        //else fall back to POSIX _exit,
+        //which should also be async-safe
+        //(whereas exit isn't)
+        _exit(1);
     }
 }
 
@@ -131,7 +140,7 @@ int GetlockNoNewPrivs()
 #endif
 #endif
 
-return(FALSE);
+    return(FALSE);
 }
 
 
@@ -325,24 +334,35 @@ void ParseArgs(int argc, char *argv[])
 
 
 
-void ReadLockFile(TLockFile *LF, pid_t *OwnerPid, time_t *LockTime)
+int ReadLockFile(TLockFile *LF, pid_t *OwnerPid, time_t *LockTime)
 {
     char *Tempstr=NULL;
     char *ptr;
     int result;
+    int RetVal=FALSE;
 
     *LockTime=0;
     Tempstr=SetStrLen(Tempstr,40);
-    lseek(LF->fd,0,SEEK_SET);
-    result=read(LF->fd,Tempstr,40);
-    if (result > 0)
+    result=lseek(LF->fd,0,SEEK_SET);
+    if (result == 0)
     {
-    StrTrunc(Tempstr, result);
-    *OwnerPid=strtol(Tempstr, &ptr, 10);
-    if (StrValid(ptr)) *LockTime=DateStrToSecs("%Y%m%d%H%M%S", ptr, NULL);
+        result=read(LF->fd,Tempstr,40);
+        if (result >= 0) RetVal=TRUE; //zero is permissiable if the lockfile is empty
+
+        if (result > 0)
+        {
+            StrTrunc(Tempstr, result);
+            *OwnerPid=strtol(Tempstr, &ptr, 10);
+            if (StrValid(ptr))
+            {
+                *LockTime=DateStrToSecs("%Y%m%d%H%M%S", ptr, NULL);
+            }
+        }
     }
 
     Destroy(Tempstr);
+
+    return(RetVal);
 }
 
 
@@ -368,7 +388,7 @@ void CommitLock(TLockFile *LF)
         if (ftruncate(LF->fd,0) != 0) LogEvent(LOG_ERR, "ERROR: ftruncate failed on file '%s'\n", LF->Path);
         lseek(LF->fd,0,SEEK_SET);
         result=write(LF->fd,Tempstr,StrLen(Tempstr));
-	if (result != StrLen(Tempstr)) LogEvent(LOG_ERR, "Issue writing pid to file '%s' for program '%s", LF->Path, Settings.Program);
+        if (result != StrLen(Tempstr)) LogEvent(LOG_ERR, "Issue writing pid to file '%s' for program '%s", LF->Path, Settings.Program);
         LF->Flags |= FLAG_GOT_LOCK;
     }
 
@@ -395,23 +415,25 @@ int DoLock(TLockFile *LF, int *OwnerPid)
     }
 
     time(&Now);
-    ReadLockFile(LF, OwnerPid, &LockTime);
-    if (lockf(LF->fd,F_TLOCK,0)==0)
+    if (ReadLockFile(LF, OwnerPid, &LockTime))
     {
-        result=LOCK_OKAY;
-
-        if (Settings.Flags & FLAG_DEBUG) LogEvent(LOG_DEBUG, "GOT LOCK ON %s", LF->Path);
-
-        if ((Settings.Interval > 0) && ((LockTime + Settings.Interval) > Now))
+        if (lockf(LF->fd,F_TLOCK,0)==0)
         {
-            Tempstr=CopyStr(Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime, NULL));
-            LogEvent(LOG_DEBUG, "Not yet time for next run. Previous: %s Next: %s", Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime + Settings.Interval, NULL) );
-            result=LOCK_NOT_TIME;
-        }
-        else CommitLock(LF);
-    }
-    else LogEvent(LOG_INFO, "FILE: %s is locked by PID: %d",LF->Path,*OwnerPid);
+            result=LOCK_OKAY;
 
+            if (Settings.Flags & FLAG_DEBUG) LogEvent(LOG_DEBUG, "GOT LOCK ON %s", LF->Path);
+
+            if ((Settings.Interval > 0) && ((LockTime + Settings.Interval) > Now))
+            {
+                Tempstr=CopyStr(Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime, NULL));
+                LogEvent(LOG_DEBUG, "Not yet time for next run. Previous: %s Next: %s", Tempstr, GetDateStrFromSecs("%Y/%m/%d %H:%M:%S", LockTime + Settings.Interval, NULL) );
+                result=LOCK_NOT_TIME;
+            }
+            else CommitLock(LF);
+        }
+        else LogEvent(LOG_INFO, "FILE: %s is locked by PID: %d",LF->Path,*OwnerPid);
+    }
+    else LogEvent(LOG_ERR, "ERROR: error reading lockfile at: %s",LF->Path);
 
     DestroyString(Tempstr);
 
@@ -524,7 +546,11 @@ int ProcessLocks(int NotifyFD)
     if (! GotLock)
     {
         LogEvent(LOG_ERR, "Couldn't lock all files for process '%s'", Settings.Program);
-        if (StrLen(Settings.OnFail)) system(Settings.OnFail);
+        if (StrValid(Settings.OnFail))
+        {
+            result=system(Settings.OnFail);
+            if (result !=0) fprintf(stderr, "ERROR: failed to run 'onfail' script: %s  error was: %s\n", Settings.OnFail, strerror(errno));
+        }
         if (NotifyFD > -1) result=write(NotifyFD,"N\n",2);
         if (! (Settings.Flags & FLAG_RUN_ANYWAY)) exit(RESULT_NOLOCK);
     }
@@ -561,7 +587,7 @@ int main(int argc, char *argv[])
     if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
     if (StrLen(Settings.User)) SwitchUser(Settings.User);
 
-		if (Settings.Flags & FLAG_NOSU) GetlockNoNewPrivs();
+    if (Settings.Flags & FLAG_NOSU) GetlockNoNewPrivs();
 
     if (! ListSize(Settings.LockFiles))
     {
@@ -589,10 +615,10 @@ int main(int argc, char *argv[])
     if (Settings.Flags & FLAG_BACKGROUND)
     {
         if (pipe(pfds) !=0)
-	{
-		Tempstr=CopyStr(Tempstr, strerror(errno));
-		LogEvent(LOG_ERR, "ERROR: Failed to create pipe to subprocess: %s", Tempstr);
-	}
+        {
+            Tempstr=CopyStr(Tempstr, strerror(errno));
+            LogEvent(LOG_ERR, "ERROR: Failed to create pipe to subprocess: %s", Tempstr);
+        }
 
         result=fork();
         if (result ==0)
