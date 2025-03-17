@@ -1,8 +1,12 @@
 
-#ifdef HAVE_LIBUSEFUL4
-#include "libUseful-4/libUseful.h"
+#ifdef USE_LIBUSEFUL_BUNDLED
+  #include "libUseful-bundled/libUseful.h"
 #else
-#include "libUseful-5/libUseful.h"
+  #ifdef HAVE_LIBUSEFUL4
+  #include "libUseful-4/libUseful.h"
+  #else
+  #include "libUseful-5/libUseful.h"
+  #endif
 #endif
 
 #include <stdarg.h>
@@ -61,7 +65,7 @@ typedef struct
 
 TSettings Settings;
 
-char *Version="4.1";
+char *Version="4.2";
 
 
 void OpenSysLog()

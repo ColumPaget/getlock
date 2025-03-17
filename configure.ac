@@ -59,7 +59,7 @@ then
 
   cf_use_ssl="yes"
 else
-  AC_DEFINE(HAVE_LIBUSEFUL5)
+  AC_DEFINE(USE_LIBUSEFUL_BUNDLED)
   AC_SUBST(LIBUSEFUL_BUNDLED,"libUseful-bundled/libUseful.a")
   AC_CONFIG_SUBDIRS([libUseful-bundled])
 fi

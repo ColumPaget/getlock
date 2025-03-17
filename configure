@@ -4208,7 +4208,7 @@ fi
 
   cf_use_ssl="yes"
 else
-  printf "%s\n" "#define HAVE_LIBUSEFUL5 1" >>confdefs.h
+  printf "%s\n" "#define USE_LIBUSEFUL_BUNDLED 1" >>confdefs.h
 
   LIBUSEFUL_BUNDLED="libUseful-bundled/libUseful.a"
 

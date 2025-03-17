@@ -1,3 +1,7 @@
+v4.2 (2025-03-17)
+  * fix error with building when no system-wide libuseful installed
+  * mv LICENCE to LICENSE
+
 v4.1 (2025-03-17)
 -----------------
   * replace exit() with _exit() in signal handler (suggested by elfring@github.com) 
