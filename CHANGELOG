@@ -26,6 +26,7 @@ v2.0 (2022-03-26)
   * added -i option
 
 v1.0 (2019-02-12)
+-----------------
   * moved configure.in to configure.ac, as the latter is apparently the correct naming convention
   * rationalized command-line args. Bumped version to 1.0, as surely there's nothing more to be added to this after the '-C' option
   * added -C (Close on Exec) option
