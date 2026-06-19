@@ -37,8 +37,8 @@ References: <CABsuZXUfs=U5_-3FSgMv2dC1dS_P3UFVhpM77D8JKhYEWXj+vA@mail.gmail.com>
 In-Reply-To: <CABsuZXUfs=U5_-3FSgMv2dC1dS_P3UFVhpM77D8JKhYEWXj+vA@mail.gmail.com>
 Accept-Language: en-US
 Content-Language: en-US
-X-MS-Has-Attach: 
-X-MS-TNEF-Correlator: 
+X-MS-Has-Attach:
+X-MS-TNEF-Correlator:
 x-originating-ip: [119.74.104.56]
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: quoted-printable
@@ -79,8 +79,15 @@ hongjun
 */
 
 
+#ifdef USE_JH
+
 #ifndef JH_HASH_H
 #define JH_HASH_H
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 typedef unsigned long long DataLength;
@@ -103,4 +110,9 @@ HashReturn JHUpdate(hashState *state, const unsigned char *data, DataLength data
 unsigned int JHFinal(hashState *state, unsigned char *hashval);
 
 
+#ifdef __cplusplus
+}
+#endif
+
+#endif
 #endif

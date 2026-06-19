@@ -1,6 +1,6 @@
 /*
 Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 #ifndef LIBUSEFUL_STRING_H
@@ -10,20 +10,20 @@ Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
 Functions related to resizeable strings.
 
 From version 4.0 libUseful uses 'StrLenCache-ing'. This dramatically speeds up
-programs that deal with long strings, as it's no longer needed to iterate 
+programs that deal with long strings, as it's no longer needed to iterate
 through the entire string to calculate its length. Instead the lengths of the
 most recently used strings are held in a cache. This means less data passes
 through the CPU's L1/L2/L3 cache, which can also further speed things up.
 
-The downside to this is that you can no longer just set a character to the 
+The downside to this is that you can no longer just set a character to the
 null character (ascii zero or '/0') in order to truncate the string, because
 the cache will still think the string has it's old length and functions like
-CatStr will misbehave, as characters will be added *after* the terminating 
+CatStr will misbehave, as characters will be added *after* the terminating
 null character, and so lost. This you must use the 'StrTrunc', 'StrTruncChar'
 and 'StrRTruncChar' functions to truncate strings
 
 Although, since the above was written, modern CPUs that have a strlen opcode
-are faster, but the difference is close enough to be hard to detect. 
+are faster, but the difference is close enough to be hard to detect.
 *****************************************************************************/
 
 #include <stdarg.h>
@@ -73,22 +73,59 @@ extern "C" {
 #define CloneStr(Str) (CopyStr(NULL,Str))
 
 //Concat 'Src' onto 'Dest'
-//yes, we need the strlen even though it means traversing the string twice. 
+//yes, we need the strlen even though it means traversing the string twice.
 //We need to know how much room 'realloc' needs
 #define CatStr(Dest, Src) (CatStrLen(Dest,Src,StrLen(Src)))
 
 
-//Quote some standard chars in a string with '\'. 
+//Quote some standard chars in a string with '\'.
 #define EnquoteStr(Dest, Src) (QuoteCharsInStr((Dest), (Src), "'\"\r\n"))
+
+
+
+
+//uppercase a string
+char *strupr(char *Str);
+
+//lowercase a string
+char *strlwr(char *Str);
+
+//replace every instance of character 'c1' with character 'c2'
+char *strrep(char *Str, char c1, char c2);
+
+//replace any character in the list 'oldchars' with the charcter 'newchar
+char *strmrep(char *str, char *oldchars, char newchar);
+
+//strtol, except only considering the first 'len' bytes
+int strntol(const char **ptr, int len, int radix, long *value);
+
+//returns 'true' if 'str' is 'true' or 'y' (case insensitive) or any non-zero number
+int strtobool(const char *str);
+
+// returns true if string only contains alphabetic characters
+int istext(const char *Str);
+
+//returns true if string only contains digits
+int isnum(const char *Str);
+
+int strcount(const char *Str, char Char);
+
 
 //allocate or reallocate 'Len' bytes of memory to a resizeable string
 char *SetStrLen(char *Str, size_t Len);
 
-//strcmp that won't creash if str is null
+//strcmp that won't crash if str is null
 int CompareStr(const char *S1, const char *S2);
+
+//strncmp that won't crash if str is null
+int CompareStrLen(const char *S1, const char *S2, size_t len);
 
 //strcasecmp that won't creash if str is null
 int CompareStrNoCase(const char *S1, const char *S2);
+
+//strncasecmp that won't creash if str is null
+int CompareStrLenNoCase(const char *S1, const char *S2, size_t len);
+
 
 //copy Len bytes from Src to Dest, resizing Dest if needed and return Dest
 char *CopyStrLen(char *Dest, const char *Src, size_t Len);
@@ -126,34 +163,8 @@ char *AddCharToBuffer(char *Buffer, size_t Len, char Char);
 
 //add 'Len' Bytes to a string already containing 'DestLen' characters
 char *AddBytesToBuffer(char *Dest, size_t DestLen, char *Bytes, size_t Len);
-
-//uppercase a string
-char *strupr(char *Str);
-
-//lowercase a string
-char *strlwr(char *Str);
-
-//replace every instance of character 'c1' with character 'c2'
-char *strrep(char *Str, char c1, char c2);
-
-//replace any character in the list 'oldchars' with the charcter 'newchar
-char *strmrep(char *str, char *oldchars, char newchar);
-
-//strtol, except only considering the first 'len' bytes
-int strntol(const char **ptr, int len, int radix, long *value);
-
-
-//returns 'true' if 'str' is 'true' or 'y' (case insensitive) or any non-zero number
-int strtobool(const char *str);
-
-// returns true if string only contains alphabetic characters
-int istext(const char *Str);
-
-//returns true if string only contains digits
-int isnum(const char *Str);
-
 //Truncate a string to so many chars, WITHOUT CHECKING IT'S GOT THAT MANY
-//this saves a strlen and is mostly for internal use. 
+//this saves a strlen and is mostly for internal use.
 //It does at least check that the string is not NULL
 char *StrUnsafeTrunc(char *Str, int Len);
 
@@ -161,7 +172,7 @@ char *StrUnsafeTrunc(char *Str, int Len);
 //Truncate a string to so many chars
 char *StrTrunc(char *Str, int Len);
 
-//Truncate a string to a terminator character. 
+//Truncate a string to a terminator character.
 //Returns 'TRUE' if character found, 'FALSE' otherwise
 int StrTruncChar(char *Str, char Term);
 
@@ -169,22 +180,38 @@ int StrTruncChar(char *Str, char Term);
 //Returns 'TRUE' if character found, 'FALSE' otherwise
 int StrRTruncChar(char *Str, char Term);
 
-//strip trailing whitespace from a string
+//strip trailing whitespace from a string. Though string is returned, it is never realloced.
 char *StripTrailingWhitespace(char *Str);
 
-//strip leading whitespace from a string
+//strip leading whitespace from a string. Though string is returned, it is never realloced.
 char *StripLeadingWhitespace(char *Str);
+
+//strip leading and trailing whitespace. Though string is returned, it is never realloced.
+char *StringTrim(char *Str);
 
 //strip carriage-return and linefeed characters from the end of a string
 char *StripCRLF(char *Str);
 
-//if string stars and ends with either ' or " strip those
+//If a string starts with a char in 'StartChars' then strip both that, and it's companion in 'EndChars'
+//e.g.  StripStartEndChars(Str, "[({", "])}");
+//if the string starts with '(', then the matching ')' is looked up in end chars and removed from the end if present
+//if '(' isn't matched by a ')' at the end, then it's not removed
+//StripStartEndChars returns the changed string, but as the strip is done using memmove there's no need
+//to write:
+//  Str=StripStartEndChars(Str, "(", ")");
+//it's enough to write:
+//  Str=StripStartEndChars(Str, "(", ")");
+char *StripStartEndChars(char *Str, const char *StartChars, const char *EndChars);
+
+//Strip either \" or \' characters surrounding a string. Only strips if the string starts and
+//ends with the same character (either \" or \'). Whitespace at start of string stripped too
+//DOESN'T strip backticks.
 char *StripQuotes(char *Str);
 
 //for any of the chars listed in 'QuoteChars' quote them using '\' style quotes.
 char *QuoteCharsInStr(char *Buffer, const char *String, const char *QuoteChars);
 
-//undo '\' style quoting and 
+//undo '\' style quoting and
 char *UnQuoteStr(char *Buffer, const char *Line);
 
 //given a list of strings. match 'Token' against them and return the index of the first one to match

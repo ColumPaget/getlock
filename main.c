@@ -12,23 +12,24 @@
 #include <stdarg.h>
 #include <syslog.h>
 
-#define FLAG_WAIT 1
-#define FLAG_RUN_ANYWAY 2
-#define FLAG_DELETE_FILE 4
-#define FLAG_TERM_OWNER 8
-#define FLAG_KILL_OWNER 16
-#define FLAG_NO_WRITE 32
-#define FLAG_GOT_LOCK 64
-#define FLAG_NO_PROGRAM 128
-#define FLAG_CLOEXEC    256
-#define FLAG_BACKGROUND 512
-#define FLAG_SILENT 1024
-#define FLAG_DEBUG 2048
-#define FLAG_NOHUP 4096
+#define FLAG_WAIT             1
+#define FLAG_RUN_ANYWAY       2
+#define FLAG_DELETE_FILE      4
+#define FLAG_TERM_OWNER       8
+#define FLAG_KILL_OWNER      16
+#define FLAG_NO_WRITE        32
+#define FLAG_GOT_LOCK        64
+#define FLAG_NO_PROGRAM     128
+#define FLAG_CLOEXEC        256
+#define FLAG_BACKGROUND     512
+#define FLAG_SILENT        1024
+#define FLAG_DEBUG         2048
+#define FLAG_NOHUP         4096
 #define FLAG_INTERVAL_FILE 8192
-#define FLAG_RESTART 16384
-#define FLAG_SYSLOG  32768
-#define FLAG_NOSU    65536
+#define FLAG_RESTART      16384
+#define FLAG_SYSLOG       32768
+#define FLAG_SU           65536
+#define FLAG_NETNS       131072
 
 #define RESULT_GOTLOCK 0
 #define RESULT_BADARGS 1
@@ -56,16 +57,22 @@ typedef struct
     int AbandonTime;
     int Interval;
     int RestartInterval;
+    int MaxPids;
+    int UserMaxPids;
+    int MaxFiles;
     ListNode *LockFiles;
     char *Program;
     char *OnFail;
     char *User;
     char *Group;
+    char *Security;
+    char *MaxMemory;
+    char *MaxFileSize;
 } TSettings;
 
 TSettings Settings;
 
-char *Version="4.2";
+char *Version="5.0";
 
 
 void OpenSysLog()
@@ -148,6 +155,44 @@ int GetlockNoNewPrivs()
 }
 
 
+void PrintSecureUsage()
+{
+printf("The '-secure' option allows passing a config to the process security layer of libUseful, which is mostly built around seccomp sandboxing. Obviously, for this to work libUseful has to have been built with seccomp and namespaces enabled.\n");
+printf("The config consists of a 'security level' and additional 'security modifiers', combined with a '+' symbol, like so: getlock -secure guest+nonet\n");
+printf("\nSecurity Levels:\n");
+printf("   minimal     - disable ptrace, deny ioctl(TIOCSTI) and kill apps that try to use: personality, uselib, userfaultfd, perf_event_open, kexec_load, get_kernel_syms, lookup_dcookie, vm86, vm86old, mbind, move_pages, nfsservctl, and anything involving kernel modules\n");
+printf("   basic       - everything in 'minimal' but also disable the 'acct' and 'capset' syscalls\n");
+printf("   user        - everything in 'basic' but also kill processes that try to use bpf, or any 'sysadmin' calls: settimeofday, clocksettime, clockadjtime, quotactl, reboot, swapon, swapoff, mount, umount, umount2, mknod, quotactl capset, or that try to use the TIOCSTI ioctl\n");
+printf("   guest       - everything in 'user' but also deny keyring access and kill attempts to use ptrace\n");
+printf("   untrusted   - everyting in 'user' but kill apps that try to: chroot, acct syscall, pidfd_open syscall, access the keyring, unshare or change namespaces, and deny access to utimes syscall\n");
+printf("   constrained - everything in 'untrusted' but kill apps that try to change filesystem times, and deny all ioctls except those listed in ioctl(user)\n");
+printf("   high        - everything in 'constrained' plus deny sending signals, making filesystem links and symlinks, or chmoding files to be exectuable\n");
+printf("   paranoid    - everything in 'high' but kill processes that try to use exec to load another program, or that try to link or symlink to files, or change file timestamps, or send signals\n");
+printf("   worker      - everything in 'paranoid' plus deny making any filesystem changes. Intended for processes that just do calculations and write them to a file\n");
+printf("   memworker   - everything in 'worker' plus kill attempted use of 'open' or other filesystem calls/changes, or 'pipe'. Intended for processes that just do calculations and write them to an existing file descriptor (e.g. stdout).\n");
+printf("\nSecurity Modifiers:\n");
+printf("   local       - only allow UNIX sockets/networking. WARNING: this modifier only works on x86_64, not on x86 due to issues with socketcall syscall\n");
+printf("   basic-net   - only allow unix, inet (IPv4) and inet6 (IPv6) sockets/networking, disabling all 'weird' address families including AF_BLUETOOTH, AF_VSOCK and AF_ALG. WARNING: this modifier only works on x86_64, not on x86 due to issues with socketcall syscall\n");
+printf("   lan         - only allow connections to devices on the same ethernet segment. This doesn't use seccomp, but instead causes all sockets to be opened with the SO_DONTROUTE flag set.\n");
+printf("   client      - deny syscalls: listen and accept, preventing 'server' activity\n");
+printf("   nonet       - use namespaces to prevent network access AND/OR SECCOMP to deny networking syscalls like socket,bind and connect\n");
+printf("   killnet     - kill processes that attempt to use networking syscalls like socket,bind and connect\n");
+printf("   netns       - use namespaces to prevent access to network\n");
+printf("   nopid       - use namespaces AND/OR SECCOMP to prevent access to other processes, sending signals or even seeing what processes are running (deny 'kill' syscall)\n");
+printf("   pidns       - use namespaces to prevent access to other processes, sending signals or even seeing what processes are running\n");
+printf("   noipc       - use namespace AND/OR SECCOMP to isolate posix IPC (deny syscalls included in both 'noshm' and 'nomsgq' above along with syscalls: semop, semget and semctl)\n");
+printf("   ipcns       - use namespaces to prevent access to posix IPC (shared memory, message queues and semaphores)\n");
+printf("   noinit      - when using a PID namespace, don't create an 'init' process for it, just run the main process in the namespace\n");
+printf("   noshm       - deny 'shared memory' syscalls: shmat, shmdt, shmget and shmctl\n");
+printf("   nomsgq      - deny 'message queues' syscalls: msgrcv, msgsnd, msgget, and msgctl\n");
+printf("   noexec      - deny use of exec family of programs to load another program\n");
+printf("\nExample:\n\n");
+printf("   getlock -secure high+nopid+client /var/lock/myprogram.lck myprogram\n\n");
+printf("run 'myprogram' with 'high' security, in a pid namespace, denying access to 'kill syscall' and limiting network comms to client (no listen or accept allowed for server communication).\n");
+}
+
+
+
 
 void PrintUsage()
 {
@@ -159,42 +204,50 @@ void PrintUsage()
     printf("USAGE:\n	getlock [options] LockFilePath [LockFilePath] ... Program\n\n");
     printf("Note that if you wish to pass arguments to the program, then you must quote it like this: getlock /var/lock/lockfile.lck \"/usr/bin/md5sum /tmp/*\"\n\n");
 
-    printf("%-8s %s\n","-a <seconds>","Abandon running task, killall subprocesses and exit after <seconds>");
-    printf("%-8s %s\n","-b","Fork into background when got lock");
-    printf("%-8s %s\n","-d","delete lockfile when done");
-    printf("%-8s %s\n","-n","'nohup', ignore SIGHUP");
-    printf("%-8s %s\n","-nohup","ignore SIGHUP");
-    printf("%-8s %s\n","-w","wait for lock (default is do not wait)");
-    printf("%-8s %s\n","-t <n>","timeout <n> secs on wait (default is wait forever if -w used)");
-    printf("%-8s %s\n","-i <n>","interval between runs. Defauts to seconds, suffix with 'm' for minutes, 'h' for hours, 'd' for days.");
-    printf("%-8s %s\n","-s","SAFE MODE, do not write pid into file");
-    printf("%-8s %s\n","-C","Close on exec, this prevents lockfiles being inherited by the child process.");
-    printf("%-8s %s\n","-D","Debug. Print what you're doing.");
-    printf("%-8s %s\n","-R","Restart program if it exits.");
-    printf("%-8s %s\n","-q <n>","Restart interval. Milliseconds delay between restart attempts.");
-    printf("%-8s %s\n","-S","Silent. No error/info/debug messages.");
-    printf("%-8s %s\n","-L","Send error/info/debug messages to syslog.");
-    printf("%-8s %s\n","-syslog","Send error/info/debug messages to syslog.");
-    printf("%-8s %s\n","-F","Run specified program if can't get lock");
-    printf("%-8s %s\n","-N","NO PROGRAM, just lock files, use with -w");
-    printf("%-8s %s\n","-X","execute program even if lock fails!");
-    printf("%-8s %s\n","-g <n>","Gracetime, wait <n> secs before doing kills");
-    printf("%-8s %s\n","-k","Send SIGTERM to lockfile owner");
-    printf("%-8s %s\n","-K","Send SIGKILL (kill -9) to lockfile owner");
-    printf("%-8s %s\n","-P","'no new privs' do not allow process escalate privilege");
-    printf("%-8s %s\n","-nosu","'no new privs' do not allow process escalate privilege");
-    printf("%-8s %s\n","-nopriv","'no new privs' do not allow process escalate privilege");
-    printf("%-8s %s\n","-U <user>","Run as user");
-    printf("%-8s %s\n","-user <user>","Run as user");
-    printf("%-8s %s\n","-G <group>","Run as group");
-    printf("%-8s %s\n","-group <group>","Run as group");
-    printf("%-8s %s\n","-v","print version");
-    printf("%-8s %s\n","-version","print version");
-    printf("%-8s %s\n","--version","print version");
-    printf("%-8s %s\n","-?","this help");
-    printf("%-8s %s\n","-h","this help");
-    printf("%-8s %s\n","-help","this help");
-    printf("%-8s %s\n","--help","this help");
+    printf("%-20s %s\n","-a <seconds>","Abandon running task, killall subprocesses and exit after <seconds>");
+    printf("%-20s %s\n","-b","Fork into background when got lock");
+    printf("%-20s %s\n","-d","delete lockfile when done");
+    printf("%-20s %s\n","-n","'nohup', ignore SIGHUP");
+    printf("%-20s %s\n","-nohup","ignore SIGHUP");
+    printf("%-20s %s\n","-w","wait for lock (default is do not wait)");
+    printf("%-20s %s\n","-t <n>","timeout <n> secs on wait (default is wait forever if -w used)");
+    printf("%-20s %s\n","-i <n>","interval between runs. Defauts to seconds, suffix with 'm' for minutes, 'h' for hours, 'd' for days.");
+    printf("%-20s %s\n","-s","SAFE MODE, do not write pid into file");
+    printf("%-20s %s\n","-C","Close on exec, this prevents lockfiles being inherited by the child process.");
+    printf("%-20s %s\n","-D","Debug. Print what you're doing.");
+    printf("%-20s %s\n","-R","Restart program if it exits.");
+    printf("%-20s %s\n","-q <n>","Restart interval. Milliseconds delay between restart attempts.");
+    printf("%-20s %s\n","-S","Silent. No error/info/debug messages.");
+    printf("%-20s %s\n","-L","Send error/info/debug messages to syslog.");
+    printf("%-20s %s\n","-syslog","Send error/info/debug messages to syslog.");
+    printf("%-20s %s\n","-F","Run specified program if can't get lock");
+    printf("%-20s %s\n","-N","NO PROGRAM, just lock files, use with -w");
+    printf("%-20s %s\n","-X","execute program even if lock fails!");
+    printf("%-20s %s\n","-g <n>","Gracetime, wait <n> secs before doing kills");
+    printf("%-20s %s\n","-k","Send SIGTERM to lockfile owner");
+    printf("%-20s %s\n","-K","Send SIGKILL (kill -9) to lockfile owner");
+    printf("%-20s %s\n","-su","'allow su' allow process escalate privilege");
+    printf("%-20s %s\n","-pids <n>","max child pids (requires linux namespaces to work)");
+    printf("%-20s %s\n","-upids <n>","max system-wide pids owned by the user of the run program");
+    printf("%-20s %s\n","-files <n>","max files open by run program");
+    printf("%-20s %s\n","-mem <size>","max memory in bytes. 'size' accepts suffixes like k, M and G");
+    printf("%-20s %s\n","-fsize <size>","max file size in bytes. 'size' accepts suffixes like k, M and G");
+    printf("%-20s %s\n","-nonet","unshare network namespace, preventing all network access");
+    printf("%-20s %s\n","-nopid","unshare pid namespace, preventing access to other processes");
+    printf("%-20s %s\n","-noipc","unshare ipc namespace, preventing access shared memory, message queues and semaphores");
+    printf("%-20s %s\n","-sec <config>","set security config, see --help-secure for more");
+    printf("%-20s %s\n","-secure <config>","set security config, see --help-secure for more");
+    printf("%-20s %s\n","-U <user>","Run as user");
+    printf("%-20s %s\n","-user <user>","Run as user");
+    printf("%-20s %s\n","-G <group>","Run as group");
+    printf("%-20s %s\n","-group <group>","Run as group");
+    printf("%-20s %s\n","-v","print version");
+    printf("%-20s %s\n","-version","print version");
+    printf("%-20s %s\n","--version","print version");
+    printf("%-20s %s\n","-?","this help");
+    printf("%-20s %s\n","-h","this help");
+    printf("%-20s %s\n","-help","this help");
+    printf("%-20s %s\n","--help","this help");
     printf("\n  The flags -d -s -i -k and -K are positional, lockfiles given before them on the command line will not be affected, those after will be.\n\n");
     printf("  -k and -K only work if the lock file owner has written their pid into the lockfile. Writing the pid is the default behavior, but -s prevents it, and getlock will also refuse to write into files bigger than %d bytes, as they are too big to only contain a Process ID\n\n", MAX_PIDFILE_SIZE);
     printf("  -i specifies an interval of time between runs. It uses the timestamp stored in lockfiles. It will not run until that timestamp, plus the interval, specifies a time that's in the past. It is a positional lock-file modifier, like -d. Thus it specifies lockfiles that will be used to store a timestamp, and which will be deleted if the run command fails (returns an exit status other than 0). In this way if the command fails, it can be immedialtely tried again. If it succeeds it will not run again until the interval expires.\n\n");
@@ -260,49 +313,62 @@ void ParseArgs(int argc, char *argv[])
 {
     ListNode *Curr;
     TLockFile *LF;
+    CMDLINE *CMD;
+    const char *arg;
     int i;
 
     memset(&Settings, 0, sizeof(Settings));
     Settings.RestartInterval=100; //100 milliseconds
-
+    Settings.MaxPids=-1;
+    Settings.UserMaxPids=-1;
+    Settings.MaxFiles=-1;
     Settings.LockFiles=ListCreate();
 
-    for (i=1; i < argc; i++)
+    CMD=CommandLineParserCreate(argc, argv);
+
+    arg=CommandLineNext(CMD);
+    while(arg)
     {
-        if (! StrLen(argv[i])) continue;
-        if (strcmp(argv[i],"-w")==0) Settings.Flags |= FLAG_WAIT;
-        else if (strcmp(argv[i],"-a")==0) Settings.AbandonTime = atoi(argv[++i]);
-        else if (strcmp(argv[i],"-g")==0) Settings.GraceTime=atoi(argv[++i]);
-        else if (strcmp(argv[i],"-i")==0) Settings.Interval=ParseInterval(argv[++i]);
-        else if (strcmp(argv[i],"-q")==0) Settings.RestartInterval=atoi(argv[++i]);
-        else if (strcmp(argv[i],"-t")==0) Settings.Timeout=atoi(argv[++i]);
-        else if (strcmp(argv[i],"-b")==0) Settings.Flags |= FLAG_BACKGROUND;
-        else if (strcmp(argv[i],"-d")==0) Settings.Flags |= FLAG_DELETE_FILE;
-        else if (strcmp(argv[i],"-n")==0) Settings.Flags |= FLAG_NOHUP;
-        else if (strcmp(argv[i],"-nohup")==0) Settings.Flags |= FLAG_NOHUP;
-        else if (strcmp(argv[i],"-s")==0) Settings.Flags |= FLAG_NO_WRITE;
-        else if (strcmp(argv[i],"-C")==0) Settings.Flags |= FLAG_CLOEXEC;
-        else if (strcmp(argv[i],"-X")==0) Settings.Flags |= FLAG_RUN_ANYWAY;
-        else if (strcmp(argv[i],"-N")==0) Settings.Flags |= FLAG_NO_PROGRAM;
-        else if (strcmp(argv[i],"-D")==0) Settings.Flags |= FLAG_DEBUG;
-        else if (strcmp(argv[i],"-S")==0) Settings.Flags |= FLAG_SILENT;
-        else if (strcmp(argv[i],"-R")==0) Settings.Flags |= FLAG_RESTART;
-        else if (strcmp(argv[i],"-k")==0) Settings.Flags |= FLAG_TERM_OWNER;
-        else if (strcmp(argv[i],"-K")==0) Settings.Flags |= FLAG_KILL_OWNER;
-        else if (strcmp(argv[i],"-L")==0) Settings.Flags |= FLAG_SYSLOG;
-        else if (strcmp(argv[i],"-syslog")==0) Settings.Flags |= FLAG_SYSLOG;
-        else if (strcmp(argv[i],"-nosu")==0) Settings.Flags |= FLAG_NOSU;
-        else if (strcmp(argv[i],"-nopriv")==0) Settings.Flags |= FLAG_NOSU;
-        else if (strcmp(argv[i],"-P")==0) Settings.Flags |= FLAG_NOSU;
-        else if (strcmp(argv[i],"-F")==0) Settings.OnFail=CopyStr(Settings.OnFail,argv[++i]);
-        else if (strcmp(argv[i],"-U")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
-        else if (strcmp(argv[i],"-user")==0) Settings.User=CopyStr(Settings.User, argv[++i]);
-        else if (strcmp(argv[i],"-G")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
-        else if (strcmp(argv[i],"-group")==0) Settings.Group=CopyStr(Settings.Group, argv[++i]);
+        if (strcmp(arg,"-w")==0) Settings.Flags |= FLAG_WAIT;
+        else if (strcmp(arg,"-a")==0) Settings.AbandonTime = atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-g")==0) Settings.GraceTime=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-i")==0) Settings.Interval=ParseInterval(CommandLineNext(CMD));
+        else if (strcmp(arg,"-q")==0) Settings.RestartInterval=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-t")==0) Settings.Timeout=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-b")==0) Settings.Flags |= FLAG_BACKGROUND;
+        else if (strcmp(arg,"-d")==0) Settings.Flags |= FLAG_DELETE_FILE;
+        else if (strcmp(arg,"-n")==0) Settings.Flags |= FLAG_NOHUP;
+        else if (strcmp(arg,"-nohup")==0) Settings.Flags |= FLAG_NOHUP;
+        else if (strcmp(arg,"-s")==0) Settings.Flags |= FLAG_NO_WRITE;
+        else if (strcmp(arg,"-C")==0) Settings.Flags |= FLAG_CLOEXEC;
+        else if (strcmp(arg,"-X")==0) Settings.Flags |= FLAG_RUN_ANYWAY;
+        else if (strcmp(arg,"-N")==0) Settings.Flags |= FLAG_NO_PROGRAM;
+        else if (strcmp(arg,"-D")==0) Settings.Flags |= FLAG_DEBUG;
+        else if (strcmp(arg,"-S")==0) Settings.Flags |= FLAG_SILENT;
+        else if (strcmp(arg,"-R")==0) Settings.Flags |= FLAG_RESTART;
+        else if (strcmp(arg,"-k")==0) Settings.Flags |= FLAG_TERM_OWNER;
+        else if (strcmp(arg,"-K")==0) Settings.Flags |= FLAG_KILL_OWNER;
+        else if (strcmp(arg,"-L")==0) Settings.Flags |= FLAG_SYSLOG;
+        else if (strcmp(arg,"-syslog")==0) Settings.Flags |= FLAG_SYSLOG;
+        else if (strcmp(arg,"-sec")==0) Settings.Security=CopyStr(Settings.Security, CommandLineNext(CMD));
+        else if (strcmp(arg,"-secure")==0) Settings.Security=CopyStr(Settings.Security, CommandLineNext(CMD));
+        else if (strcmp(arg,"-su")==0) Settings.Flags |= FLAG_SU;
+        else if (strcmp(arg,"-pids")==0) Settings.MaxPids=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-upids")==0) Settings.UserMaxPids=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-files")==0) Settings.MaxFiles=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-mem")==0) Settings.MaxMemory=CopyStr(Settings.MaxMemory, CommandLineNext(CMD));
+        else if (strcmp(arg,"-fsize")==0) Settings.MaxFileSize=CopyStr(Settings.MaxFileSize, CommandLineNext(CMD));
+        else if (strcmp(arg,"-nonet")==0) Settings.Flags |= FLAG_NETNS;
+        else if (strcmp(arg,"-P")==0) Settings.MaxPids=atoi(CommandLineNext(CMD));
+        else if (strcmp(arg,"-F")==0) Settings.OnFail=CopyStr(Settings.OnFail,CommandLineNext(CMD));
+        else if (strcmp(arg,"-U")==0) Settings.User=CopyStr(Settings.User, CommandLineNext(CMD));
+        else if (strcmp(arg,"-user")==0) Settings.User=CopyStr(Settings.User, CommandLineNext(CMD));
+        else if (strcmp(arg,"-G")==0) Settings.Group=CopyStr(Settings.Group, CommandLineNext(CMD));
+        else if (strcmp(arg,"-group")==0) Settings.Group=CopyStr(Settings.Group, CommandLineNext(CMD));
         else if (
-            (strcmp(argv[i],"-v")==0) ||
-            (strcmp(argv[i],"-version")==0) ||
-            (strcmp(argv[i],"--version")==0)
+            (strcmp(arg,"-v")==0) ||
+            (strcmp(arg,"-version")==0) ||
+            (strcmp(arg,"--version")==0)
         )
         {
             printf("version: %s\n",Version);
@@ -310,28 +376,36 @@ void ParseArgs(int argc, char *argv[])
         }
         else if
         (
-            (strcmp(argv[i],"-?")==0) ||
-            (strcmp(argv[i],"-h")==0) ||
-            (strcmp(argv[i],"-help")==0) ||
-            (strcmp(argv[i],"--help")==0)
+            (strcmp(arg,"-?")==0) ||
+            (strcmp(arg,"-h")==0) ||
+            (strcmp(arg,"-help")==0) ||
+            (strcmp(arg,"--help")==0)
         )
         {
             PrintUsage();
             exit(0);
         }
+        else if (strcmp(arg,"--help-secure")==0)
+        {
+            PrintSecureUsage();
+            exit(0);
+        }
+ 
         else if (
             (! (Settings.Flags & FLAG_NO_PROGRAM)) &&
-            (i==(argc-1))
-        ) Settings.Program=CopyStr(Settings.Program, argv[i]);
+            (CommandLinePeek(CMD) == NULL)
+        ) Settings.Program=CopyStr(Settings.Program, arg);
         else
         {
             LF=(TLockFile *) calloc(1,sizeof(TLockFile));
-            LF->Path=CopyStr(LF->Path,argv[i]);
+            LF->Path=CopyStr(LF->Path, arg);
             LF->Flags=Settings.Flags;
             LF->fd=-1;
             Curr=ListAddItem(Settings.LockFiles,LF);
         }
 
+
+    arg=CommandLineNext(CMD);
     }
 
 }
@@ -492,6 +566,54 @@ void DeleteFiles(ListNode *LockFiles, int RequiredFlag)
 }
 
 
+
+void SetupProgram()
+{
+    char *Tempstr=NULL, *Config=NULL;
+
+
+    Config=CopyStr(Config, "");
+    if (Settings.MaxPids > -1) 
+    {
+	Tempstr=FormatStr(Tempstr, "nprocs=%d ", Settings.MaxPids);
+	Config=CatStr(Config, Tempstr);
+    }
+
+    if (Settings.UserMaxPids > -1) 
+    {
+	Tempstr=FormatStr(Tempstr, "uprocs=%d ", Settings.UserMaxPids);
+	Config=CatStr(Config, Tempstr);
+    }
+
+
+    if (Settings.MaxMemory) Config=MCatStr(Config, "mem=", Settings.MaxMemory, " ", NULL);
+
+    if (Settings.MaxFiles > -1) 
+    {
+	Tempstr=FormatStr(Tempstr, "files=%d ", Settings.MaxFiles);
+	Config=CatStr(Config, Tempstr);
+    }
+    if (Settings.MaxFileSize) Config=MCatStr(Config, "fsize=", Settings.MaxFileSize, " ", NULL);
+
+    if (Settings.Flags & FLAG_NETNS) Config=CatStr(Config, "nonet ");
+
+ 
+    if (StrValid(Settings.Security)) Config=MCatStr(Config, "security='", Settings.Security, "' ", NULL);
+
+
+
+    if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
+    if (StrLen(Settings.User)) SwitchUser(Settings.User);
+
+    ProcessApplyConfig(Config);
+    if (! (Settings.Flags & FLAG_SU)) GetlockNoNewPrivs();
+
+
+    Destroy(Tempstr);
+    Destroy(Config);
+}
+
+
 void RunProgram()
 {
     int ExitCode;
@@ -506,9 +628,12 @@ void RunProgram()
             alarm(Settings.AbandonTime);
         }
 
-        //Actually run program or script!
         LogEvent(LOG_INFO, "Run: %s", Settings.Program);
+
+        SetupProgram();
+        //Actually run program or script!
         ExitCode=system(Settings.Program);
+
         LogEvent(LOG_INFO, "Exited: %s ExitStatus: %d", Settings.Program, ExitCode);
         if (ExitCode != 0) DeleteFiles(Settings.LockFiles, FLAG_INTERVAL_FILE);
 
@@ -579,19 +704,16 @@ int ProcessLocks(int NotifyFD)
 
 
 
+
 int main(int argc, char *argv[])
 {
     int result, GotLock=FALSE;
-    char *Tempstr=NULL;
     int pfds[2];
+    char *Tempstr=NULL;
 
     ParseArgs(argc,argv);
 
     OpenSysLog();
-    if (StrLen(Settings.Group)) SwitchGroup(Settings.Group);
-    if (StrLen(Settings.User)) SwitchUser(Settings.User);
-
-    if (Settings.Flags & FLAG_NOSU) GetlockNoNewPrivs();
 
     if (! ListSize(Settings.LockFiles))
     {
@@ -642,6 +764,10 @@ int main(int argc, char *argv[])
         }
     }
     else GotLock=ProcessLocks(-1);
+
+
+    Destroy(Tempstr);
+
 
     if (GotLock) return(RESULT_GOTLOCK);
     return(RESULT_NOLOCK);

@@ -1,6 +1,6 @@
 /*
 Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 #ifndef LIBUSEFUL_SSH_H
@@ -13,7 +13,7 @@ Connect to an ssh server and run a command. This requires the ssh command-line p
 
 You will normally not use these functions, instead using something like 'STREAMOpen("ssh://myhost.com:2222", "r bind=192.168.6.1");'
 
-The 'config' argument to SSHConnect and SSHOpen is the same as other STREAMOpen style commands, consisting of a set of fopen-style 'open flags' 
+The 'config' argument to SSHConnect and SSHOpen is the same as other STREAMOpen style commands, consisting of a set of fopen-style 'open flags'
 followed by name-value pairs for other settings
 
 Currently recognized 'open flags' are:

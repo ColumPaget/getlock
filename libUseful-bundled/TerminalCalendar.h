@@ -1,6 +1,6 @@
 /*
 Copyright (c) 2025 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 /* This implements a terminal-based calendar widget
@@ -29,8 +29,8 @@ The date returned by 'TerminalCalendar' is in the format 'YYYY-mm-dd'
  *
  *  month=<num>                       Month in year, expressed as a number 1-12 (defaults to current month)
  *  year=<num>                        Year (defaults to current year)
- *  x=<col>                           Position the calendar at terminal column 'x'. 
- *  y=<row>                           Position the calendar at terminal row 'y'. 
+ *  x=<col>                           Position the calendar at terminal column 'x'.
+ *  y=<row>                           Position the calendar at terminal row 'y'.
  *  left_cursor=<str>                 Text/Attributes for the left hand side of the cursor
  *  right_cursor=<str>                Text/Attributes for the right hand side of the cursor
  *  TitleAttributes=<str>             Attributes for the Month/Year title bar
@@ -73,6 +73,9 @@ char *TerminalCalendar(char *RetStr, STREAM *Term, int x, int y, const char *Con
 //create a calendar object
 TERMCALENDAR *TerminalCalendarCreate(STREAM *Term, int x, int y, const char *Config);
 
+void TerminalCalendarParseConfig(TERMCALENDAR *TC, const char *Config);
+
+
 //draw a calendar
 void TerminalCalendarDraw(TERMCALENDAR *TC);
 
@@ -88,7 +91,8 @@ char *TerminalCalendarReturnDate(char *RetStr, TERMCALENDAR *TC);
 //set the month and year of the displayed calendar
 void TerminalCalendarSetMonthYear(TERMCALENDAR *TC, int Month, int Year);
 
-// set a 'state' and attributes for that state against a day/month/year 
+// set a 'state' and attributes for that state against a day/month/year
+void TerminalCalendarSetDateStrState(TERMCALENDAR *TC, const char *DateStr, const char *State, const char *Attribs);
 void TerminalCalendarSetDateState(TERMCALENDAR *TC, int Day, int Month, int Year, const char *State, const char *Attribs);
 
 #ifdef __cplusplus

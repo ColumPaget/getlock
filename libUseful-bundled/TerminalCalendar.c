@@ -16,17 +16,16 @@ void TerminalCalendarSetMonthYear(TERMCALENDAR *TC, int Month, int Year)
 
 
 
-void TerminalCalendarSetDateState(TERMCALENDAR *TC, int Day, int Month, int Year, const char *State, const char *Attribs)
+void TerminalCalendarSetDateStrState(TERMCALENDAR *TC, const char *DateStr, const char *State, const char *Attribs)
 {
     char *Tempstr=NULL, *Key=NULL;
-    const char *ptr;
 
-    Key=FormatStr(Key, "datestate:%04d-%02d-%02d", Year, Month, Day);
+    Key=MCopyStr(Key, "datestate:", DateStr, NULL);
     SetVar(TC->Options, Key, State);
 
-    if (StrValid(ptr))
+    if (StrValid(Attribs))
     {
-        Tempstr=FormatStr(Tempstr, "stateattribs:%s", Key);
+        Tempstr=MCopyStr(Tempstr, "stateattribs:", State, NULL);
         SetVar(TC->Options, Tempstr, Attribs);
     }
 
@@ -34,6 +33,15 @@ void TerminalCalendarSetDateState(TERMCALENDAR *TC, int Day, int Month, int Year
     Destroy(Key);
 }
 
+void TerminalCalendarSetDateState(TERMCALENDAR *TC, int Day, int Month, int Year, const char *State, const char *Attribs)
+{
+    char *Tempstr=NULL;
+
+    Tempstr=FormatStr(Tempstr, "%04d-%02d-%02d", Year, Month, Day);
+    TerminalCalendarSetDateStrState(TC, Tempstr, State, Attribs);
+
+    Destroy(Tempstr);
+}
 
 
 //Lookup TerminalAttributes (colors, bold, etc) for a day in the calendar.
@@ -54,7 +62,8 @@ static char *TerminalCalendarLookupDayAttribs(char *Attribs, TERMCALENDAR *TC, c
     }
 
     if (StrValid(ptr)) Attribs=CatStr(Attribs, ptr);
-    else if ((*DayStr == '-') || (*DayStr == '+')) Attribs=CatStr(Attribs, GetVar(TC->Options, "OutsideMonthAttribs"));
+
+    if ((*DayStr == '-') || (*DayStr == '+')) Attribs=CatStr(Attribs, GetVar(TC->Options, "OutsideMonthAttribs"));
     else
     {
         Attribs=CatStr(Attribs, GetVar(TC->Options, "InsideMonthAttribs"));
@@ -263,22 +272,25 @@ char *TerminalCalendarOnKey(char *RetStr, TERMCALENDAR *TC, int Key)
 }
 
 
-static void TerminalCalendarParseConfig(TERMCALENDAR *TC, const char *Config, int *Month, int *Year)
+void TerminalCalendarParseConfig(TERMCALENDAR *TC, const char *Config)
 {
     char *Name=NULL, *Value=NULL;
     const char *ptr;
+    int Month=-1, Year=-1;
 
     TerminalWidgetParseConfig(TC, Config);
 
     ptr=GetNameValuePair(Config, "\\S", "=", &Name, &Value);
     while (ptr)
     {
-        if (strcasecmp(Name, "month")==0) *Month=atoi(Value);
-        else if (strcasecmp(Name, "year")==0) *Year=atoi(Value);
+        if (strcasecmp(Name, "month")==0) Month=atoi(Value);
+        else if (strcasecmp(Name, "year")==0) Year=atoi(Value);
         else SetVar(TC->Options, Name, Value);
 
         ptr=GetNameValuePair(ptr, "\\S", "=", &Name, &Value);
     }
+
+    if ((Month > -1) && (Year > -1)) TerminalCalendarSetMonthYear(TC, Month, Year);
 
     Destroy(Name);
     Destroy(Value);
@@ -299,11 +311,12 @@ TERMCALENDAR *TerminalCalendarCreate(STREAM *Term, int x, int y, const char *Con
     Year= Now->tm_year + 1900;
 
     TC=TerminalWidgetNew(Term, x, y, 0, 0, "type=calendar");
-    TerminalCalendarParseConfig(TC, Config, &Month, &Year);
+    TerminalCalendarSetMonthYear(TC, Month, Year);
+
+    TerminalCalendarParseConfig(TC, Config);
     SetVar(TC->Options, "Selector", "0");
 
 
-    TerminalCalendarSetMonthYear(TC, Month, Year);
 
     return(TC);
 }

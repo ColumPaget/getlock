@@ -1,6 +1,6 @@
 /*
 Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 /* This implements a simple terminal progress bar
@@ -17,7 +17,7 @@ TerminalInit(Term, TERM_RAWKEYS | TERM_SAVEATTRIBS);
 TerminalClear(Term);
 
 TP=TerminalProgressCreate(Term, "prompt='progress: ' left-contain=' -=' right-contain='=- ' progress=| width=20");
-for (i=0; i <= 20; i++) 
+for (i=0; i <= 20; i++)
 {
 Tempstr=FormatStr(Tempstr, "NOW AT: %d", i);
 TerminalProgressUpdate(TP, i, 20, Tempstr);
@@ -42,6 +42,7 @@ TerminalReset(Term);
  *  progress-attrib=   Set attributes of PROGRESS part of the bar
  *  left-contain=      A string to be the left 'container' of the bar, defaults to ' ['
  *  right-contain=     A string to be the right 'container' of the bar, defaults to '] '
+ *  innertext=         Text displayed in (or 'over') the progress bar, can contain $(percent) to be updated with percentage done
  *
  *  attrib and progress-attrib can be used to create bars based only around colored blocks, like so
 

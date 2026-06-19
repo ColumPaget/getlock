@@ -20,13 +20,22 @@ void LibUsefulInitSettings()
     char *Tempstr=NULL;
 
     LibUsefulSettings=ListCreate(LIST_FLAG_CACHE);
-    SetVar(LibUsefulSettings,"LibUseful:Version",__LIBUSEFUL_VERSION__);
-    Tempstr=MCopyStr(Tempstr,__LIBUSEFUL_BUILD_DATE__," ",__LIBUSEFUL_BUILD_TIME__,NULL);
-    SetVar(LibUsefulSettings,"LibUseful:BuildTime",Tempstr);
-    Tempstr=FormatStr(Tempstr, "%d", 4096 * 10000);
-    SetVar(LibUsefulSettings,"MaxDocumentSize", Tempstr);
-    Tempstr=FormatStr(Tempstr, "%d", 4096 * 10000);
-    SetVar(LibUsefulSettings,"WEBSOCKET:MaxFrameSize", Tempstr);
+    SetVar(LibUsefulSettings, "LibUseful:Version", __LIBUSEFUL_VERSION__);
+
+    Tempstr=MCopyStr(Tempstr, __LIBUSEFUL_BUILD_DATE__, " ", __LIBUSEFUL_BUILD_TIME__, NULL);
+    SetVar(LibUsefulSettings, "LibUseful:BuildTime", Tempstr);
+
+#ifdef USE_LGPL
+    SetVar(LibUsefulSettings, "LibUseful:License", "LGPLv3");
+#else
+    SetVar(LibUsefulSettings, "LibUseful:License", "GPLv3");
+#endif
+
+    Tempstr=FormatStr(Tempstr,  "%d",  4096 * 10000);
+    SetVar(LibUsefulSettings, "MaxDocumentSize",  Tempstr);
+
+    Tempstr=FormatStr(Tempstr,  "%d",  4096 * 10000);
+    SetVar(LibUsefulSettings, "WEBSOCKET:MaxFrameSize",  Tempstr);
 
     DestroyString(Tempstr);
 }
@@ -90,20 +99,64 @@ int LibUsefulDebugActive()
 }
 
 
-void LibUsefulAtExit()
+STREAM *LibUsefulConfigFileOpen(const char *FName, const char *EnvVarName, const char *LibUsefulVar)
 {
-#ifdef HAVE_MUNLOCKALL
-    if (LibUsefulFlags & LU_MLOCKALL) munlockall();
-#endif
+    char *Tempstr=NULL;
+    STREAM *S=NULL;
 
-    if (LibUsefulFlags & LU_CONTAINER) FileSystemUnMount("/","lazy");
-    ConnectionHopCloseAll();
-    CredsStoreDestroy();
+    if (StrValid(LibUsefulVar)) Tempstr=CopyStr(Tempstr, LibUsefulGetValue(LibUsefulVar));
+    if ( (! StrValid(Tempstr)) && (StrValid(EnvVarName)) ) Tempstr=CopyStr(Tempstr, getenv(EnvVarName));
+
+    if (! StrValid(Tempstr)) Tempstr=MCopyStr(Tempstr, SYSCONFDIR,  "/", FName, NULL);
+    if (access(Tempstr, R_OK) !=0) Tempstr=FindFileInPrefixSubDirectory(Tempstr, getenv("PATH"), "/etc/", FName);
+
+    S=STREAMOpen(Tempstr, "r");
+
+    Destroy(Tempstr);
+    return(S);
 }
 
 
-void LibUsefulSetupAtExit()
+
+int LibUsefulCheckVersion(int Op, int CheckMajor, int CheckMinor)
 {
-    if (! (LibUsefulFlags & LU_ATEXIT_REGISTERED)) atexit(LibUsefulAtExit);
-    LibUsefulFlags |= LU_ATEXIT_REGISTERED;
+    const char *ptr;
+    char *Token=NULL;
+    int Major, Minor;
+
+    ptr=GetVar(LibUsefulSettings, "LibUseful:Version");
+    if (! StrValid(ptr)) return(FALSE);
+
+    ptr=GetToken(ptr, ".", &Token, 0);
+    Major=atoi(Token);
+    Minor=atoi(ptr);
+
+    switch (Op)
+    {
+    case CHECK_VERSION_EXISTS:
+        return(TRUE);
+        break;
+
+    case CHECK_VERSION_EQUAL:
+        if ( (Major == CheckMajor) && (Minor == CheckMinor)) return(TRUE);
+        break;
+
+    case CHECK_VERSION_AT_LEAST:
+        if ( (Major >= CheckMajor) && (Minor >= CheckMinor)) return(TRUE);
+        break;
+
+    case CHECK_VERSION_GREATER:
+        if ( (Major <= CheckMajor) && (Minor <= CheckMinor)) return(TRUE);
+        break;
+    case CHECK_VERSION_LESS:
+        if ( (Major < CheckMajor) && (Minor < CheckMinor)) return(TRUE);
+        break;
+    }
+
+
+    Destroy(Token);
+
+    return(FALSE);
 }
+
+

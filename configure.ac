@@ -10,9 +10,122 @@ AC_PROG_EGREP
  
 AC_SYS_LARGEFILE
 
+
+
+dnl define a function we can use to check if a compiler flag
+dnl is supported by the compiler
+AC_DEFUN([CHECK_COMPILER_OPT],
+[
+  COMP_OPT="$@"
+  AC_MSG_CHECKING([if compiler supports $COMP_OPT])
+  OLD_CFLAGS="$CFLAGS"
+  CFLAGS="$CFLAGS $COMP_OPT"
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM(int test() {
+    return 1;
+  })], [COMP_OPT_SUPPORT="yes"], [COMP_OPT_SUPPORT="no"])
+  AC_MSG_RESULT([$COMP_OPT_SUPPORT])
+  AS_IF([test "$COMP_OPT_SUPPORT" != "yes"], [CFLAGS="$OLD_CFLAGS"])
+])
+
+
+AC_DEFUN([CHECK_DEFINE],
+[
+  AC_MSG_CHECKING([if $2 contains "$1"])
+  have_define=no
+  AC_RUN_IFELSE([AC_LANG_PROGRAM([
+  #include <stdlib.h>
+  #include "$2"
+  ],[
+  #ifdef $1
+    exit(0);
+  #endif
+  exit(1)
+  ])], [have_$1="yes"], [have_$1="no"])
+
+  AC_MSG_RESULT([$have_$1])
+])
+
+
+
+
+AC_ARG_ENABLE([wall],
+[AS_HELP_STRING([--enable-wall], [use -Wall to get maximum compile warnings (default=no)])],
+[cf_use_wall=$enableval],
+[cf_use_wall=no]
+)
+AS_IF([test "$cf_use_wall" = "yes"], [
+  CHECK_COMPILER_OPT("-Wall")
+])
+
+
+AC_ARG_ENABLE([werror],
+[AS_HELP_STRING([--enable-werror], [treat compile warnings as errors (default=no)])],
+[cf_use_werror=$enableval],
+[cf_use_werror=no]
+)
+AS_IF([test "$cf_use_werror" = "yes"], [
+  CHECK_COMPILER_OPT("-Werror")
+])
+
+
+
+AC_ARG_ENABLE([pie],
+[AS_HELP_STRING([--enable-pie], [build using -fPIE for position independant code, if compiler supports it (default=yes)])],
+[cf_use_pie=$enableval],
+[cf_use_pie=yes]
+)
+
+
+AS_IF([test "$cf_use_pie" = "yes"], [
+  CHECK_COMPILER_OPT("-fPIE")
+])
+
+
+
+AC_ARG_ENABLE([fortify],
+[AS_HELP_STRING([--enable-fortify], [use 'FORTIFY_SOURCE=3' to harden source code (default=no)])],
+[cf_use_fortify=$enableval],
+[cf_use_fortify=no]
+)
+AC_ARG_ENABLE([stack-protect],
+[AS_HELP_STRING([--enable-stack-protect], [use '-fstack-protector-strong' to harden source code (default=no)])],
+[cf_use_stackprotect=$enableval],
+[cf_use_stackprotect=no]
+)
+AC_ARG_ENABLE([harden],
+[AS_HELP_STRING([--enable-harden], [use 'FORTIFY_SOURCE=3' and stack-protect to harden source code (default=no)])],
+[cf_use_harden=$enableval],
+[cf_use_harden=no]
+)
+
+
+
+AS_IF([test "$cf_use_harden" = "yes"],
+[
+  cf_use_fortify="yes"
+  cf_use_stackprotect="yes"
+
+  CHECK_COMPILER_OPT("-ftrivial-auto-var-init=zero")
+  CHECK_COMPILER_OPT("-fstack-clash-protection")
+  CHECK_COMPILER_OPT("-fno-strict-overflow")
+  CHECK_COMPILER_OPT("-fno-strict-aliasing")
+  CHECK_COMPILER_OPT("-fno-delete-null-pointer-checks")
+  CHECK_COMPILER_OPT("-fcf-protection=full")
+  CHECK_COMPILER_OPT("-mmitigate-rop")
+  CHECK_COMPILER_OPT("-fhardened")
+  CHECK_COMPILER_OPT("-Wl,-z,relro,-z,now")
+  CHECK_COMPILER_OPT("-fPIE")
+])
+
+
+
+
+
 AC_ARG_WITH(libuseful, [  --with-libuseful		use system-wide libUseful (default=auto) ], cf_system_libuseful=$withval )
 AC_ARG_ENABLE(ssl, [  --enable-ssl 	only needed if statically linked libuseful is linked against openssl ], cf_use_ssl=$enableval, cf_use_ssl="no" )
 AC_ARG_ENABLE(zlib, [  --enable-zlib     only needed if statically linked libuseful is linked against zlib], cf_use_zlib=$enableval, cf_use_zlib="no")
+
+
 
 AC_CHECK_FUNCS(prctl)
 AC_CHECK_HEADERS([sys/prctl.h])

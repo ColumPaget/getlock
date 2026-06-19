@@ -3,7 +3,7 @@
 #include "Hash.h"
 #include <sys/utsname.h>
 
-#ifdef HAVE_SYS_RANDOM_H
+#ifdef HAVE_SYS_RANDOM
 #include <sys/random.h>
 #endif
 
@@ -112,14 +112,14 @@ int GenerateRandomBytes(char **RetBuff, int ReqLen, int Encoding)
 
 
 
-char *GetRandomData(char *RetBuff, int ReqLen, char *AllowedChars)
+char *GetRandomData(char *RetStr, int ReqLen, char *AllowedChars)
 {
-    char *Tempstr=NULL, *RetStr=NULL;
+    char *Tempstr=NULL;
     int i, len;
     uint8_t val, max_val;
 
     max_val=StrLen(AllowedChars);
-    RetStr=CopyStr(RetBuff,"");
+    RetStr=CopyStr(RetStr,"");
     len=GenerateRandomBytes(&Tempstr, ReqLen, 0);
 
     for (i=0; i < len ; i++)

@@ -62,26 +62,31 @@ int BASIC_FUNC_EXEC_COMMAND(void *Command, int Flags)
         ptr=FinalCommand;
         ptr=GetToken(FinalCommand,"\\S",&Token,GETTOKEN_QUOTES);
         ExecPath=FindFileInPath(ExecPath,Token,getenv("PATH"));
-        i=0;
-
-        if (! (Flags & SPAWN_ARG0))
+        if (StrValid(ExecPath))
         {
-            argv[0]=CopyStr(argv[0],ExecPath);
-            i=1;
-        }
+            i=0;
 
-        for (; i < max_arg; i++)
-        {
-            ptr=GetToken(ptr,"\\S",&Token,GETTOKEN_QUOTES);
-            if (! ptr) break;
-            argv[i]=CopyStr(argv[i],Token);
-        }
+            if (! (Flags & SPAWN_ARG0))
+            {
+                argv[0]=CopyStr(argv[0],ExecPath);
+                i=1;
+            }
 
-        result=execv(ExecPath, argv);
+            for (; i < max_arg; i++)
+            {
+                ptr=GetToken(ptr, "\\S", &Token, GETTOKEN_QUOTES);
+                if (! ptr) break;
+                argv[i]=CopyStr(argv[i], Token);
+            }
+
+            result=execv(ExecPath, argv);
+        }
+        else RaiseError(ERRFLAG_ERRNO, "Spawn", "Failed to execute '%s', can't find executable",Command);
     }
     else result=execl("/bin/sh","/bin/sh","-c",(char *) Command,NULL);
 
     RaiseError(ERRFLAG_ERRNO, "Spawn", "Failed to execute '%s'",Command);
+
 //We'll never get to here unless something fails!
     DestroyString(FinalCommand);
     DestroyString(ExecPath);
@@ -189,7 +194,7 @@ static int PipeSpawnCreateStdOutPipe(const char *Type, int channel[2], int ToNul
     channel[0]=-1;
     channel[1]=-1;
 
-//if we ask for this to be set to null, then we map leave fd set to -1
+//if we ask for this to be set to null, then we leave fd set to -1
 //which maps to /dev/null in xforkio
     if (! ToNull)
     {
@@ -219,8 +224,8 @@ pid_t PipeSpawnFunction(int *infd, int *outfd, int *errfd, BASIC_FUNC Func, void
     if (infd) c1=PipeSpawnCreateStdOutPipe("stdin", channel1, 0);
     if (outfd) c2=PipeSpawnCreateStdOutPipe("stdout", channel2, Flags & SPAWN_STDOUT_NULL);
 
-    if (errfd) c3=PipeSpawnCreateStdOutPipe("stderr", channel3, Flags & SPAWN_STDERR_NULL);
-    else if (Flags & SPAWN_COMBINE_STDERR) c3=c2;
+    if (Flags & SPAWN_COMBINE_STDERR) c3=c2;
+    else if (errfd) c3=PipeSpawnCreateStdOutPipe("stderr", channel3, Flags & SPAWN_STDERR_NULL);
 
     pid=xforkio(c1, c2, c3);
     if (pid==0)
@@ -278,22 +283,37 @@ pid_t PipeSpawn(int *infd,int  *outfd,int  *errfd, const char *Command, const ch
 
 
 
-pid_t PseudoTTYSpawnFunction(int *ret_pty, BASIC_FUNC Func, void *Data, int Flags, const char *Config)
+pid_t PseudoTTYSpawnFunction(int *ret_pty, BASIC_FUNC Func, void *Data, int TTYFlags, const char *Config)
 {
     pid_t pid=-1, ConfigFlags=0;
-    int tty, pty;
+    int tty, tty_in, tty_out, tty_err, pty;
+    int SpawnFlags;
 
-    if (PseudoTTYGrab(&pty, &tty, Flags))
+
+    if (PseudoTTYGrab(&pty, &tty, TTYFlags))
     {
+
+        SpawnFlags=SpawnParseConfig(Config);
+        //if we've been asked to point stderr or stdout to /dev/null then set those file descriptors to -1
+        //xforkio will then map them to /dev/null.
+        //otherwise set tty_in, tty_out, tty_err to point to our tty
+        tty_in=tty;
+        if (SpawnFlags & SPAWN_STDOUT_NULL) tty_out=-1;
+        else tty_out=tty;
+        if (SpawnFlags & SPAWN_STDERR_NULL) tty_err=-1;
+        else tty_err=tty;
+
         //ContainerApplyConfig(Config);
-        pid=xforkio(tty, tty, tty);
+        pid=xforkio(tty_in, tty_out, tty_err);
         if (pid==0)
         {
             close(pty);
 
+            //we want limits etc to apply to our new session
+            setsid();
+
             ConfigFlags=ProcessApplyConfig(Config);
 
-            setsid();
             ProcessSetControlTTY(tty);
 
             ///now that we've dupped it, we don't need to keep it open
@@ -329,7 +349,7 @@ pid_t PseudoTTYSpawn(int *pty, const char *Command, const char *Config)
 
 STREAM *STREAMSpawnFunction(BASIC_FUNC Func, void *Data, const char *Config)
 {
-    int to_fd, from_fd, *iptr;
+    int to_fd, from_fd, err_fd;
     pid_t pid=0;
     STREAM *S=NULL;
     char *Tempstr=NULL;
@@ -343,8 +363,8 @@ STREAM *STREAMSpawnFunction(BASIC_FUNC Func, void *Data, const char *Config)
     }
     else
     {
-        iptr=NULL;
-        pid=PipeSpawnFunction(&to_fd, &from_fd, iptr, Func, Data, Config);
+        err_fd=-1;
+        pid=PipeSpawnFunction(&to_fd, &from_fd, &err_fd, Func, Data, Config);
     }
 
     if (pid > 0)
@@ -362,6 +382,7 @@ STREAM *STREAMSpawnFunction(BASIC_FUNC Func, void *Data, const char *Config)
         Tempstr=FormatStr(Tempstr,"%d",pid);
         STREAMSetValue(S,"PeerPID",Tempstr);
         S->Type=STREAM_TYPE_PIPE;
+        S->Path=MCopyStr(S->Path, "fork:", Tempstr, NULL);
     }
 
     DestroyString(Tempstr);
@@ -391,6 +412,7 @@ STREAM *STREAMSpawnCommand(const char *Command, const char *Config)
     //take a copy of this as it's going to be passed to another process and
     Token=CopyStr(Token, Command);
     if (UseShell || StrValid(ExecPath)) S=STREAMSpawnFunction(BASIC_FUNC_EXEC_COMMAND, (void *) Token, Config);
+    if (S) S->Path=MCopyStr(S->Path, "exec:", Command, NULL);
 
     Destroy(ExecPath);
     Destroy(Token);

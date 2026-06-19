@@ -1,7 +1,7 @@
 
 /*
 Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 
@@ -90,7 +90,7 @@ int DoSSLClientNegotiation(STREAM *S, int Flags);
 //'Flags' can be any of the LU_SSL_ flags listed above
 int DoSSLServerNegotiation(STREAM *S, int Flags);
 
-//functions internally used by STREAM objects. 
+//functions internally used by STREAM objects.
 int OpenSSLSTREAMCheckForBytes(STREAM *S);
 int OpenSSLSTREAMReadBytes(STREAM *S, char *Data, int Len);
 int OpenSSLSTREAMWriteBytes(STREAM *S, const char *Data, int Len);

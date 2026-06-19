@@ -1,4 +1,12 @@
+v5.0 (2026-06-17)
+-----------------
+  * 'no su' (no new privs) is now the default '-su' option added to allow specifying a program can su
+  *  added support for limiting child processes, or user-owned processes
+  *  added support for limiting memory, files open, file size, 
+  *  added support for specifying 'seccomp' secure levels
+
 v4.2 (2025-03-17)
+-----------------
   * fix error with building when no system-wide libuseful installed
   * mv LICENCE to LICENSE
 

@@ -1,11 +1,11 @@
 /*
 Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 /*
 
-These functions relate to CLIENT SIZE http, https
+These functions relate to CLIENT SIDE http, https
 
 For basic http usage (getting webpages) you don't need to use most of this stuff. You can just pass the URL to 'STREAMOpen' like so:
 
@@ -93,7 +93,7 @@ Note, 'hostauth' is not a name/value pair, just a config flag that enables sendi
 #define HTTP_TRY_HTTPS 64   // try to connect with https even if connection says http
 #define HTTP_REQ_HTTPS 128  // fail if connection isn't HTTPS
 #define HTTP_KEEPALIVE 256  // use HTTP keepalive 
-#define HTTP_POSTARGS  512  
+#define HTTP_POSTARGS  512
 #define HTTP_SSL 1024          //flag indicates SSL is in use, not set by user
 #define HTTP_SSL_REWRITE 2048
 #define HTTP_PROXY 4096
@@ -161,18 +161,6 @@ typedef struct
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-//apply http quoting (e.g. space is '%20') to a string, quoting any character in 'CharList'
-// e.g.  Quoted=HTTPQuoteChars(Quoted, "http://user:pass@somewhere.com",":@");
-char *HTTPQuoteChars(char *RetBuff, const char *Str, const char *CharList);
-
-//apply http quoting to a string, quoting standard problematic characters
-// e.g.  Quoted=HTTPQuote(Quoted, "http://user:pass@somewhere.com");
-char *HTTPQuote(char *RetBuff, const char *Str);
-
-//unquote a string that contains HTTP style quoting
-// e.g.  Str=HTTPUnQuote(Str, Quoted);
-char *HTTPUnQuote(char *RetBuff, const char *Str);
 
 //Create an HTTPInfoStruct from components
 HTTPInfoStruct *HTTPInfoCreate(const char *Protocol, const char *Host, int Port, const char *Logon, const char *Password, const char *Method, const char *Doc, const char *ContentType, int ContentLength);

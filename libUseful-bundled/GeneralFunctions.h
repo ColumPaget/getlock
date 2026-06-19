@@ -1,6 +1,6 @@
 /*
 Copyright (c) 2015 Colum Paget <colums.projects@googlemail.com>
-* SPDX-License-Identifier: GPL-3.0
+* SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
 #ifndef LIBUSEFUL_GENERAL_H
@@ -18,7 +18,7 @@ A number of general functions that don't fit anywhere else
 extern "C" {
 #endif
 
-//Destroy an allocated object. Will not crash if passed NULL. 
+//Destroy an allocated object. Will not crash if passed NULL.
 void Destroy(void *Obj);
 
 //reverse bytes within a uint32, There doesn't seem to be a POSIX function for this,
